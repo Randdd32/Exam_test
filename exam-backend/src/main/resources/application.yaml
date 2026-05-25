@@ -1,3 +1,28 @@
 spring:
   application:
-    name: exam-backend
+    name: Exam backend
+  datasource:
+    url: jdbc:h2:file:./app-db;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;AUTO_RECONNECT=TRUE
+    driverClassName: org.h2.Driver
+    username: sa
+    password: password
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        default_batch_fetch_size: 100
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+server:
+  port: 8080
+
+jwt:
+  secret: ${JWT_SECRET:rDuFODTRZ/2qQIlDWO+Yk1sde/+qRKckhoxwOcaa3dI=}
+  access-expiration-minutes: ${JWT_ACCESS_EXPIRATION_MINUTES:30}
+  refresh-expiration-days: ${JWT_REFRESH_EXPIRATION_DAYS:60}
