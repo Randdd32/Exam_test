@@ -11,6 +11,7 @@ import { AdminLayout } from './layouts/AdminLayout/AdminLayout';
 import { UsersPage } from './pages/UsersPage/UsersPage';
 import { UserEditPage } from './pages/UserEditPage/UserEditPage';
 import { LogsPage } from './pages/LogsPage/LogsPage';
+import './styles/globals.css';
 
 const HomePage = () => <h1>Главная страница (доступна всем)</h1>;
 const ProfilePage = () => <h1>Профиль (Только авторизованным)</h1>;
