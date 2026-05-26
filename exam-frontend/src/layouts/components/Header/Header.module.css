@@ -70,6 +70,45 @@
 
 @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
 
+.iconButton {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+.iconButton:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 @media (max-width: 600px) {
   .userName, .userRole { display: none; }
+}
+
+@media (max-width: 500px) {
+  .logoText {
+    display: none;
+  }
+  .rightSide {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 370px) {
+  .header {
+    padding: 0 12px;
+  }
+  .authButtons {
+    gap: 4px;
+  }
+  .mobileBtn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
 }

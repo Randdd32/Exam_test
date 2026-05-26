@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Shield, User, LogOut, ChevronDown, LayoutDashboard } from 'lucide-react';
+import { Shield, User, LogOut, ChevronDown, LayoutDashboard, Sun, Moon } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useAuthStore } from '../../../store/authStore';
+import { useUiStore } from '../../../store/uiStore';
 import { authService } from '../../../services/auth.service';
 import { ROLE_LABELS } from '../../../types/auth';
 import { Button } from '../../../components/ui/Button/Button';
@@ -13,6 +14,7 @@ import styles from './Header.module.css';
 export const Header = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { theme, toggleTheme } = useUiStore();
   const { user, isAuthenticated, isAdmin, logout } = useAuthStore();
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -49,14 +51,18 @@ export const Header = () => {
       <header className={styles.header}>
         <Link to="/" className={styles.logo}>
           <Shield size={24} className={styles.logoIcon} />
-          <span>ExamApp</span>
+          <span className={styles.logoText}>ExamApp</span>
         </Link>
 
         <div className={styles.rightSide}>
+          <button onClick={toggleTheme} className={styles.iconButton} title="Сменить тему">
+            {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+          </button>
+
           {!isAuthenticated ? (
             <div className={styles.authButtons}>
-              <Button variant="ghost" onClick={() => setAuthModal('login')}>Вход</Button>
-              <Button onClick={() => setAuthModal('register')}>Регистрация</Button>
+              <Button variant="ghost" onClick={() => setAuthModal('login')} className={styles.mobileBtn}>Вход</Button>
+              <Button onClick={() => setAuthModal('register')} className={styles.mobileBtn}>Регистрация</Button>
             </div>
           ) : (
             <div className={styles.profileWrapper} ref={profileRef}>
@@ -68,7 +74,7 @@ export const Header = () => {
                 </div>
                 <ChevronDown size={16} className={clsx(styles.chevron, { [styles.rotated]: isProfileOpen })} />
               </div>
-
+              
               {isProfileOpen && (
                 <div className={styles.dropdownMenu}>
                   <Link to="/profile" className={styles.dropdownItem} onClick={() => setIsProfileOpen(false)}>
@@ -80,10 +86,9 @@ export const Header = () => {
                       <Link to="/admin" className={styles.dropdownItem} onClick={() => setIsProfileOpen(false)}>
                         <LayoutDashboard size={16} /> Админ-панель
                       </Link>
-                      
+                      <div className={styles.dropdownDivider} />
                     </>
                   )}
-                  <div className={styles.dropdownDivider} />
                   <button className={clsx(styles.dropdownItem, styles.logoutBtn)} onClick={handleLogout}>
                     <LogOut size={16} /> Выйти
                   </button>
@@ -93,18 +98,9 @@ export const Header = () => {
           )}
         </div>
       </header>
-
-      <LoginModal 
-        isOpen={isLoginOpen} 
-        onClose={() => setAuthModal(null)} 
-        onSwitchToRegister={() => setAuthModal('register')} 
-      />
       
-      <RegisterModal 
-        isOpen={isRegisterOpen} 
-        onClose={() => setAuthModal(null)} 
-        onSwitchToLogin={() => setAuthModal('login')} 
-      />
+      <LoginModal isOpen={isLoginOpen} onClose={() => setAuthModal(null)} onSwitchToRegister={() => setAuthModal('register')} />
+      <RegisterModal isOpen={isRegisterOpen} onClose={() => setAuthModal(null)} onSwitchToLogin={() => setAuthModal('login')} />
     </>
   );
 };

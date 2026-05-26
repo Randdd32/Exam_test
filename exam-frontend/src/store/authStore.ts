@@ -16,6 +16,8 @@ interface AuthState {
   checkAuth: () => Promise<void>;
 }
 
+let authPromise: Promise<void> | null = null;
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   accessToken: null,
@@ -38,29 +40,37 @@ export const useAuthStore = create<AuthState>((set) => ({
   }),
 
   checkAuth: async () => {
-    try {
-      const fingerprint = getBrowserFingerprint();
-      const { data } = await axios.post(
-        `${API_BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`, 
-        { fingerprint }, 
-        { withCredentials: true }
-      );
-      
-      set({ 
-        accessToken: data.accessToken, 
-        user: { username: data.username, role: data.role }, 
-        isAuthenticated: true, 
-        isInitialized: true,
-        isAdmin: data.role === 'ADMIN' || data.role === 'SUPERADMIN'
-      });
-    } catch {
-      set({ 
-        accessToken: null, 
-        user: null, 
-        isAuthenticated: false, 
-        isInitialized: true,
-        isAdmin: false
-      });
-    }
+    if (authPromise) return authPromise;
+
+    authPromise = (async () => {
+      try {
+        const fingerprint = getBrowserFingerprint();
+        const { data } = await axios.post(
+          `${API_BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`, 
+          { fingerprint }, 
+          { withCredentials: true }
+        );
+        
+        set({ 
+          accessToken: data.accessToken, 
+          user: { username: data.username, role: data.role }, 
+          isAuthenticated: true, 
+          isInitialized: true,
+          isAdmin: data.role === 'ADMIN' || data.role === 'SUPERADMIN'
+        });
+      } catch {
+        set({ 
+          accessToken: null, 
+          user: null, 
+          isAuthenticated: false, 
+          isInitialized: true,
+          isAdmin: false
+        });
+      } finally {
+        authPromise = null;
+      }
+    })();
+
+    return authPromise;
   }
 }));

@@ -1,0 +1,4948 @@
+///frontend
+
+//"C:/exam-test/exam-frontend/src/App.tsx"
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'react-hot-toast';
+import { useUiStore } from './store/uiStore';
+import { useAuthStore } from './store/authStore';
+import { Spinner } from './components/ui/Spinner/Spinner';
+import { ProtectedRoute } from './components/ProtectedRoute/ProtectedRoute';
+import { MainLayout } from './layouts/MainLayout/MainLayout';
+import { AdminLayout } from './layouts/AdminLayout/AdminLayout';
+import { UsersPage } from './pages/UsersPage/UsersPage';
+import { UserEditPage } from './pages/UserEditPage/UserEditPage';
+import { LogsPage } from './pages/LogsPage/LogsPage';
+import './styles/globals.css';
+
+const HomePage = () => <h1>Главная страница (доступна всем)</h1>;
+const ProfilePage = () => <h1>Профиль (Только авторизованным)</h1>;
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
+});
+
+export const App = () => {
+  const theme = useUiStore((state) => state.theme);
+  const { isInitialized, checkAuth } = useAuthStore();
+
+  useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
+  useEffect(() => { checkAuth(); }, [checkAuth]);
+
+  if (!isInitialized) return <Spinner fullPage size={48} />;
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<MainLayout />}>
+            <Route index element={<HomePage />} />
+            
+            <Route element={<ProtectedRoute />}>
+              <Route path="profile" element={<ProfilePage />} />
+              {/* Тут будут защищенные роуты билета (Мои заказы, Мои фото и т.д.) */}
+            </Route>
+          </Route>
+
+          <Route path="/admin" element={<ProtectedRoute allowedRoles={['ADMIN', 'SUPERADMIN']} />}>
+            <Route element={<AdminLayout />}>
+              <Route index element={<Navigate to="users" replace />} />
+              <Route path="users" element={<UsersPage />} />
+              <Route path="users/:id" element={<UserEditPage />} />
+              <Route path="logs" element={<LogsPage />} />
+            </Route>
+          </Route>
+          
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+      
+      <Toaster 
+        position="top-center" 
+        toastOptions={{
+          style: {
+            background: 'var(--bg-surface)', color: 'var(--text-primary)',
+            border: '1px solid var(--border-color)', maxWidth: '500px'
+          }
+        }}
+      />
+    </QueryClientProvider>
+  );
+};
+
+export default App;
+
+//"C:/exam-test/exam-frontend/src/main.tsx"
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import App from './App.tsx'
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+)
+
+
+//"C:/exam-test/exam-frontend/src/components/ProtectedRoute/ProtectedRoute.tsx"
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useAuthStore } from '../../store/authStore';
+import { ErrorState } from '../ui/ErrorState/ErrorState';
+import type { UserRole } from '../../types/auth';
+
+interface ProtectedRouteProps {
+  allowedRoles?: UserRole[];
+}
+
+export const ProtectedRoute = ({ allowedRoles }: ProtectedRouteProps) => {
+  const { isAuthenticated, user } = useAuthStore();
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/?auth=login" state={{ from: location }} replace />;
+  }
+
+  if (allowedRoles && user && !allowedRoles.includes(user.role)) {
+    return (
+      <ErrorState 
+        title="Доступ запрещен (403)"
+        message="У вас нет прав для просмотра этой страницы."
+        actionLabel="Вернуться на главную"
+        onAction={() => window.location.href = '/'}
+      />
+    );
+  }
+
+  return <Outlet />;
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/Badge/Badge.module.css"
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid transparent; 
+}
+
+.default {
+  background-color: var(--bg-hover);
+  color: var(--text-secondary);
+  border-color: var(--border-color);
+}
+
+.info {
+  background-color: color-mix(in srgb, var(--status-info) 15%, transparent);
+  color: var(--status-info);
+  border-color: color-mix(in srgb, var(--status-info) 30%, transparent);
+}
+
+.success {
+  background-color: color-mix(in srgb, var(--status-low) 15%, transparent);
+  color: var(--status-low);
+  border-color: color-mix(in srgb, var(--status-low) 30%, transparent);
+}
+
+.warning {
+  background-color: color-mix(in srgb, var(--status-medium) 15%, transparent);
+  color: var(--status-medium);
+  border-color: color-mix(in srgb, var(--status-medium) 30%, transparent);
+}
+
+.danger {
+  background-color: color-mix(in srgb, var(--status-critical) 15%, transparent);
+  color: var(--status-critical);
+  border-color: color-mix(in srgb, var(--status-critical) 30%, transparent);
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/Badge/Badge.tsx"
+import type { ReactNode } from 'react';
+import { clsx } from 'clsx';
+import styles from './Badge.module.css';
+
+interface BadgeProps {
+  children: ReactNode;
+  variant?: 'info' | 'success' | 'warning' | 'danger' | 'default';
+  className?: string;
+}
+
+export const Badge = ({ children, variant = 'default', className }: BadgeProps) => {
+  return (
+    <span className={clsx(styles.badge, styles[variant], className)}>
+      {children}
+    </span>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/Button/Button.module.css"
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: var(--transition);
+  outline: none;
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.primary {
+  background-color: var(--primary-color);
+  color: white;
+}
+.primary:hover:not(:disabled) { background-color: var(--primary-hover); }
+
+.secondary {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+.secondary:hover:not(:disabled) { background-color: var(--bg-hover); }
+
+.danger {
+  background-color: var(--status-critical);
+  color: white;
+}
+.ghost {
+  background-color: transparent;
+  color: var(--text-secondary);
+}
+.ghost:hover:not(:disabled) { background-color: var(--bg-hover); color: var(--text-primary); }
+
+//"C:/exam-test/exam-frontend/src/components/ui/Button/Button.tsx"
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { clsx } from 'clsx';
+import styles from './Button.module.css';
+import { Loader2 } from 'lucide-react';
+
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  children: ReactNode;
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  isLoading?: boolean;
+}
+
+export const Button = ({ 
+  children, 
+  variant = 'primary', 
+  isLoading, 
+  className, 
+  disabled, 
+  ...props 
+}: ButtonProps) => {
+  return (
+    <button
+      className={clsx(styles.button, styles[variant], className)}
+      disabled={isLoading || disabled}
+      {...props}
+    >
+      {isLoading && <Loader2 className={styles.spinner} size={16} />}
+      {children}
+    </button>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/Card/Card.module.css"
+.card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+}
+
+.hoverable {
+  cursor: pointer;
+}
+
+.hoverable:hover {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+@media (max-width: 480px) {
+  .card {
+    padding: 16px;
+  }
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/Card/Card.tsx"
+import type { ReactNode, HTMLAttributes } from 'react';
+import { clsx } from 'clsx';
+import styles from './Card.module.css';
+
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  children: ReactNode;
+  isHoverable?: boolean;
+}
+
+export const Card = ({ children, className, isHoverable = false, ...props }: CardProps) => {
+  return (
+    <div 
+      className={clsx(styles.card, { [styles.hoverable]: isHoverable }, className)} 
+      {...props}
+    >
+      {children}
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/ConfirmModal/ConfirmModal.module.css"
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 200;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  max-width: 440px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  z-index: 210;
+  padding: 24px;
+  animation: scaleIn 0.2s ease-out;
+}
+
+.closeBtn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.closeBtn:hover {
+  color: var(--text-primary);
+}
+
+.content {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.iconWrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.danger {
+  background: color-mix(in srgb, var(--status-critical) 15%, transparent);
+  color: var(--status-critical);
+}
+
+.primary {
+  background: color-mix(in srgb, var(--primary-color) 15%, transparent);
+  color: var(--primary-color);
+}
+
+.textSide {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.message {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: translate(-50%, -45%) scale(0.95); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (max-width: 480px) {
+  .content {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .footer {
+    flex-direction: column-reverse;
+    gap: 10px;
+  }
+  .footer button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/ConfirmModal/ConfirmModal.tsx"
+import { AlertTriangle, X } from 'lucide-react';
+import { clsx } from 'clsx';
+import { Button } from '../Button/Button';
+import styles from './ConfirmModal.module.css';
+
+interface ConfirmModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  variant?: 'danger' | 'primary';
+  isLoading?: boolean;
+}
+
+export const ConfirmModal = ({
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  title, 
+  message, 
+  confirmLabel = 'Подтвердить', 
+  variant = 'danger', 
+  isLoading 
+}: ConfirmModalProps) => {
+  if (!isOpen) return null;
+
+  return (
+    <>
+      <div className={styles.backdrop} onClick={onClose} />
+      <div className={styles.modal}>
+        <button className={styles.closeBtn} onClick={onClose} disabled={isLoading}>
+          <X size={20} />
+        </button>
+        
+        <div className={styles.content}>
+          <div className={clsx(styles.iconWrapper, styles[variant])}>
+            <AlertTriangle size={24} />
+          </div>
+          <div className={styles.textSide}>
+            <h3 className={styles.title}>{title}</h3>
+            <p className={styles.message}>{message}</p>
+          </div>
+        </div>
+
+        <div className={styles.footer}>
+          <Button variant="ghost" onClick={onClose} disabled={isLoading}>
+            Отмена
+          </Button>
+          <Button variant={variant} onClick={onConfirm} isLoading={isLoading}>
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/DropdownSelect/DropdownSelect.module.css"
+.container {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  cursor: pointer;
+  outline: none;
+  transition: var(--transition);
+}
+
+.trigger:hover, .trigger.open {
+  border-color: var(--primary-color);
+}
+
+.triggerContent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon {
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+}
+
+.selectedText {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chevron {
+  color: var(--text-secondary);
+  margin-left: 8px;
+  transition: transform 0.2s ease;
+}
+
+.chevron.rotatedUp { 
+  transform: rotate(180deg); 
+}
+.chevron.defaultTop { 
+  transform: rotate(180deg); 
+}
+.chevron.rotatedDown { 
+  transform: rotate(0deg); 
+}
+
+.menu {
+  position: absolute;
+  left: 0;
+  min-width: 100%;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 6px;
+  z-index: 50;
+}
+
+.bottom {
+  top: calc(100% + 4px);
+  animation: fadeInDown 0.15s ease-out;
+}
+
+.top {
+  bottom: calc(100% + 4px);
+  top: auto;
+  animation: fadeInUp 0.15s ease-out;
+}
+
+.optionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.option {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.1s, color 0.1s;
+}
+
+.option:hover {
+  background-color: color-mix(in srgb, var(--bg-hover) 80%, transparent);
+}
+
+.option.selected {
+  background-color: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/DropdownSelect/DropdownSelect.tsx"
+import { useState, useRef, useEffect } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { clsx } from 'clsx';
+import styles from './DropdownSelect.module.css';
+
+interface Option {
+  value: string | number;
+  label: string;
+}
+
+interface DropdownSelectProps {
+  value: string | number;
+  onChange: (value: string | number) => void;
+  options: Option[];
+  icon?: React.ReactNode;
+  className?: string;
+  placement?: 'top' | 'bottom';
+}
+
+export const DropdownSelect = ({ value, onChange, options, icon, className, placement = 'bottom' }: DropdownSelectProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  },[]);
+
+  const selectedLabel = options.find((opt) => String(opt.value) === String(value))?.label;
+
+  const handleSelect = (val: string | number) => {
+    onChange(val);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className={clsx(styles.container, className)} ref={containerRef}>
+      <button 
+        type="button"
+        className={clsx(styles.trigger, { [styles.open]: isOpen })}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className={styles.triggerContent}>
+          {icon && <span className={styles.icon}>{icon}</span>}
+          <span className={styles.selectedText}>{selectedLabel}</span>
+        </div>
+        <ChevronDown size={16} className={clsx(styles.chevron, { 
+          [styles.rotatedUp]: isOpen && placement === 'bottom',
+          [styles.rotatedDown]: isOpen && placement === 'top',
+          [styles.defaultTop]: placement === 'top' && !isOpen 
+        })} />
+      </button>
+
+      {isOpen && (
+        <div className={clsx(styles.menu, styles[placement])}>
+          <div className={styles.optionsList}>
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={clsx(styles.option, { [styles.selected]: String(opt.value) === String(value) })}
+                onClick={() => handleSelect(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/EmptyState/EmptyState.module.css"
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--text-secondary);
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-color);
+  margin: 24px 0;
+}
+
+.iconWrapper {
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.message {
+  font-size: 14px;
+  max-width: 400px;
+}
+
+.actionWrapper {
+  margin-top: 20px;
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/EmptyState/EmptyState.tsx"
+import type { ReactNode } from 'react';
+import { clsx } from 'clsx';
+import styles from './EmptyState.module.css';
+
+interface EmptyStateProps {
+  icon: ReactNode;
+  title: string;
+  message: string;
+  action?: ReactNode;
+  className?: string;
+}
+
+export const EmptyState = ({ icon, title, message, action, className }: EmptyStateProps) => {
+  return (
+    <div className={clsx(styles.container, className)}>
+      <div className={styles.iconWrapper}>{icon}</div>
+      <h3 className={styles.title}>{title}</h3>
+      <p className={styles.message}>{message}</p>
+      {action && <div className={styles.actionWrapper}>{action}</div>}
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/ErrorState/ErrorState.module.css"
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-secondary);
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--status-critical);
+  margin: 24px 0;
+}
+
+.icon {
+  color: var(--status-critical);
+  margin-bottom: 16px;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.message {
+  font-size: 14px;
+  max-width: 400px;
+}
+
+.actionBtn {
+  margin-top: 20px;
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/ErrorState/ErrorState.tsx"
+import { AlertTriangle } from 'lucide-react';
+import { clsx } from 'clsx';
+import { Button } from '../Button/Button';
+import styles from './ErrorState.module.css';
+
+interface ErrorStateProps {
+  title?: string;
+  message?: string;
+  onAction?: () => void;
+  actionLabel?: string;
+  className?: string;
+}
+
+export const ErrorState = ({
+  title = 'Произошла ошибка',
+  message = 'Что-то пошло не так при загрузке данных. Пожалуйста, попробуйте позже.',
+  onAction,
+  actionLabel = 'Вернуться назад',
+  className,
+}: ErrorStateProps) => {
+  return (
+    <div className={clsx(styles.container, className)}>
+      <AlertTriangle size={48} className={styles.icon} />
+      <h3 className={styles.title}>{title}</h3>
+      <p className={styles.message}>{message}</p>
+      {onAction && (
+        <Button variant="secondary" onClick={onAction} className={styles.actionBtn}>
+          {actionLabel}
+        </Button>
+      )}
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/FilterSidebar/FilterSidebar.module.css"
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.4);
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition);
+}
+
+.backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 360px;
+  background-color: var(--bg-surface);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.1);
+  z-index: 110;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar.open {
+  transform: translateX(0);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+.closeBtn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.footer {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  gap: 12px;
+}
+
+.resetBtn {
+  flex: 1;
+}
+
+.applyBtn {
+  flex: 1;
+}
+
+@media (max-width: 480px) {
+  .sidebar {
+    width: 100%;
+  }
+  .header {
+    padding: 16px;
+  }
+  .content {
+    padding: 16px;
+    gap: 16px;
+  }
+  .footer {
+    padding: 16px;
+  }
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/FilterSidebar/FilterSidebar.tsx"
+import type { ReactNode } from 'react';
+import { X, RotateCcw } from 'lucide-react';
+import { clsx } from 'clsx';
+import { Button } from '../Button/Button';
+import styles from './FilterSidebar.module.css';
+
+interface FilterSidebarProps {
+  title: string;
+  isOpen: boolean;
+  onClose: () => void;
+  onReset: () => void;
+  children: ReactNode;
+}
+
+export const FilterSidebar = ({ title, isOpen, onClose, onReset, children }: FilterSidebarProps) => {
+  return (
+    <>
+      <div className={clsx(styles.backdrop, { [styles.open]: isOpen })} onClick={onClose} />
+      <div className={clsx(styles.sidebar, { [styles.open]: isOpen })}>
+        <div className={styles.header}>
+          <h3 className={styles.title}>{title}</h3>
+          <button onClick={onClose} className={styles.closeBtn}><X size={20} /></button>
+        </div>
+
+        <div className={styles.content}>
+          {children}
+        </div>
+
+        <div className={styles.footer}>
+          <Button variant="ghost" onClick={onReset} className={styles.resetBtn}>
+            <RotateCcw size={16} /> Сбросить
+          </Button>
+          <Button onClick={onClose} className={styles.applyBtn}>
+            Показать
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/Input/Input.module.css"
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.inputContainer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.input {
+  width: 100%;
+  height: 40px;
+  padding: 8px 12px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  transition: var(--transition);
+  outline: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.input:placeholder-shown {
+  text-overflow: ellipsis;
+}
+
+.input.withIcon {
+  padding-left: 40px;
+}
+
+.input.withClear {
+  padding-right: 40px; 
+}
+
+.clearButton {
+  position: absolute;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 50%;
+  transition: var(--transition);
+}
+.clearButton:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.input:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 20%, transparent);
+}
+
+.input::placeholder {
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+.hasError {
+  border-color: var(--status-critical) !important;
+  background-color: color-mix(in srgb, var(--status-critical) 5%, var(--bg-surface));
+}
+.hasError:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-critical) 20%, transparent) !important;
+}
+.errorIcon {
+  position: absolute;
+  right: 12px;
+  color: var(--status-critical);
+  pointer-events: none;
+}
+.withClear.hasError { padding-right: 40px; }
+.errorMessage {
+  font-size: 12px;
+  color: var(--status-critical);
+  margin-top: 2px;
+  animation: fadeIn 0.2s ease-in-out;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+//"C:/exam-test/exam-frontend/src/components/ui/Input/Input.tsx"
+import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
+import { clsx } from 'clsx';
+import { X, AlertCircle } from 'lucide-react';
+import styles from './Input.module.css';
+
+interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+  icon?: ReactNode;
+  error?: string;
+  onClear?: () => void;
+}
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(
+  ({ className, icon, error, onClear, value, placeholder, ...props }, ref) => {
+    const showClearButton = onClear && value && String(value).length > 0;
+
+    return (
+      <div className={styles.wrapper}>
+        <div className={styles.inputContainer}>
+          {icon && <span className={styles.icon}>{icon}</span>}
+          
+          <input
+            ref={ref}
+            value={value}
+            placeholder={placeholder}
+            className={clsx(
+              styles.input,
+              { [styles.withIcon]: !!icon, [styles.hasError]: !!error, [styles.withClear]: showClearButton },
+              className
+            )}
+            {...props}
+          />
+
+          {showClearButton && (
+            <button type="button" onClick={onClear} className={styles.clearButton} title="Очистить">
+              <X size={16} />
+            </button>
+          )}
+          {error && <AlertCircle size={16} className={styles.errorIcon} />}
+        </div>
+        {error && <span className={styles.errorMessage}>{error}</span>}
+      </div>
+    );
+  }
+);
+Input.displayName = 'Input';
+
+//"C:/exam-test/exam-frontend/src/components/ui/Modal/Modal.module.css"
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 200;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  max-width: 440px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  z-index: 210;
+  display: flex;
+  flex-direction: column;
+  animation: scaleIn 0.2s ease-out;
+  max-height: 90vh;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.closeBtn:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.content {
+  padding: 24px;
+  overflow-y: auto;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: translate(-50%, -45%) scale(0.95); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/Modal/Modal.tsx"
+import { type ReactNode, useEffect } from 'react';
+import { X } from 'lucide-react';
+import styles from './Modal.module.css';
+
+interface ModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+}
+
+export const Modal = ({ isOpen, onClose, title, children }: ModalProps) => {
+  useEffect(() => {
+    if (isOpen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = '';
+    return () => { document.body.style.overflow = ''; };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      <div className={styles.backdrop} onClick={onClose} />
+      <div className={styles.modal}>
+        <div className={styles.header}>
+          <h3 className={styles.title}>{title}</h3>
+          <button className={styles.closeBtn} onClick={onClose}><X size={20} /></button>
+        </div>
+        <div className={styles.content}>{children}</div>
+      </div>
+    </>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/Pagination/Pagination.module.css"
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.pagesRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.navBtn, .pageBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: inherit;
+}
+
+.navBtn {
+  color: var(--text-secondary);
+  padding: 8px;
+}
+
+.navBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.navBtn:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.pageBtn {
+  width: 36px;
+  height: 36px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.pageBtn:hover:not(.active) {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.pageBtn.active {
+  background-color: var(--primary-color);
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+}
+
+.dots {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+}
+
+.sizeSelectorWrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sizeLabel {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.sizeSelector {
+  width: 80px;
+  height: 36px;
+}
+
+.miniDropdown {
+  height: 100%;
+}
+
+.stats {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 430px) {
+  .infoRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/Pagination/Pagination.tsx"
+import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { clsx } from 'clsx';
+import { DropdownSelect } from '../DropdownSelect/DropdownSelect';
+import styles from './Pagination.module.css';
+
+interface PaginationProps {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange?: (size: number) => void;
+  pageSizeOptions?: number[];
+  className?: string;
+  placement?: 'top' | 'bottom';
+}
+
+export const Pagination = ({
+  currentPage,
+  totalPages,
+  totalItems,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
+  pageSizeOptions =[6, 12, 24, 48, 96],
+  className,
+  placement = 'top'
+}: PaginationProps) => {
+  if (totalItems === 0) return null;
+
+  const startItem = currentPage * pageSize + 1;
+  const endItem = Math.min((currentPage + 1) * pageSize, totalItems);
+
+  const getPageNumbers = () => {
+    const pages: (number | string)[] =[];
+    if (totalPages <= 7) {
+      for (let i = 0; i < totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 3) {
+        pages.push(0, 1, 2, 3, 4, '...', totalPages - 1);
+      } else if (currentPage >= totalPages - 4) {
+        pages.push(0, '...', totalPages - 5, totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1);
+      } else {
+        pages.push(0, '...', currentPage - 1, currentPage, currentPage + 1, '...', totalPages - 1);
+      }
+    }
+    return pages;
+  };
+
+  return (
+    <div className={clsx(styles.container, className)}>
+      <div className={styles.pagesRow}>
+        <button
+          className={styles.navBtn}
+          disabled={currentPage === 0}
+          onClick={() => onPageChange(currentPage - 1)}
+        >
+          <ChevronLeft size={20} />
+        </button>
+
+        {getPageNumbers().map((page, index) =>
+          page === '...' ? (
+            <div key={`dots-${index}`} className={styles.dots}>
+              <MoreHorizontal size={18} />
+            </div>
+          ) : (
+            <button
+              key={page}
+              className={clsx(styles.pageBtn, {[styles.active]: currentPage === page })}
+              onClick={() => onPageChange(page as number)}
+            >
+              {(page as number) + 1}
+            </button>
+          )
+        )}
+
+        <button
+          className={styles.navBtn}
+          disabled={currentPage >= totalPages - 1}
+          onClick={() => onPageChange(currentPage + 1)}
+        >
+          <ChevronRight size={20} />
+        </button>
+      </div>
+
+      <div className={styles.infoRow}>
+        {onPageSizeChange ? (
+          <div className={styles.sizeSelectorWrapper}>
+            <span className={styles.sizeLabel}>Показать:</span>
+            <div className={styles.sizeSelector}>
+              <DropdownSelect
+                value={pageSize}
+                onChange={(val) => onPageSizeChange(Number(val))}
+                options={pageSizeOptions.map(opt => ({ 
+                  value: opt, 
+                  label: String(opt) 
+                }))}
+                placement={placement}
+                className={styles.miniDropdown}
+              />
+            </div>
+          </div>
+        ) : <div />}
+
+        <div className={styles.stats}>
+          Результаты: {startItem} - {endItem} из {totalItems}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/SearchableSelect/SearchableSelect.tsx"
+import AsyncSelect from 'react-select/async';
+import { useState, useEffect } from 'react';
+import debounce from 'lodash.debounce';
+import { getSelectStyles } from '../../../utils/selectStyles';
+import type { MultiValue, SingleValue } from 'react-select';
+import type { SelectOption } from '../../../types/common';
+
+interface SearchableSelectProps {
+  value: number | string | (number | string)[] | null;
+  onChange: (value: number | string | (number | string)[] | null) => void;
+  fetchOptions: (search?: string) => Promise<SelectOption[]>;
+  fetchByIds: (ids: (number | string)[]) => Promise<SelectOption[]>;
+  isMulti?: boolean;
+  placeholder?: string;
+  className?: string;
+  isDisabled?: boolean;
+}
+
+export const SearchableSelect = ({
+  value, onChange, fetchOptions, fetchByIds,
+  isMulti = false, placeholder = 'Выберите значение...', className, isDisabled = false
+}: SearchableSelectProps) => {
+  const [selectedOptions, setSelectedOptions] = useState<SelectOption | SelectOption[] | null>(null);
+  const [isLoadingInitial, setIsLoadingInitial] = useState(false);
+
+  useEffect(() => {
+    const loadInitial = async () => {
+      const isValueEmpty = isMulti 
+        ? (!value || (value as (number | string)[]).length === 0) 
+        : (!value && value !== 0 && value !== '');
+        
+      if (isValueEmpty) {
+        setSelectedOptions(isMulti ?[] : null);
+        return;
+      }
+      
+      setIsLoadingInitial(true);
+      try {
+        const idsToFetch = isMulti ? (value as (number | string)[]) :[value as number | string];
+        const fetched = await fetchByIds(idsToFetch);
+        setSelectedOptions(isMulti ? fetched : (fetched.length > 0 ? fetched[0] : null));
+      } catch {
+        setSelectedOptions(isMulti ?[] : null);
+      } finally {
+        setIsLoadingInitial(false);
+      }
+    };
+    loadInitial();
+  }, [value, isMulti, fetchByIds]);
+
+  const loadOptions = debounce((inputValue: string, callback: (options: SelectOption[]) => void) => {
+    fetchOptions(inputValue)
+      .then(options => callback(options))
+      .catch(() => {
+        callback([]);
+      });
+  }, 300);
+
+  const handleChange = (selected: unknown) => {
+    setSelectedOptions(selected as SelectOption | SelectOption[] | null);
+    
+    if (isMulti) {
+      const multiSelected = selected as MultiValue<SelectOption>;
+      if (!multiSelected || multiSelected.length === 0) {
+        onChange([]);
+      } else {
+        onChange(multiSelected.map(item => item.value));
+      }
+    } else {
+      const singleSelected = selected as SingleValue<SelectOption>;
+      onChange(singleSelected ? singleSelected.value : null);
+    }
+  };
+
+  return (
+    <AsyncSelect
+      className={className}
+      value={selectedOptions}
+      onChange={handleChange}
+      loadOptions={loadOptions}
+      defaultOptions={true}
+      isMulti={isMulti}
+      placeholder={placeholder}
+      isDisabled={isDisabled || isLoadingInitial}
+      isLoading={isLoadingInitial}
+      styles={getSelectStyles()}
+      noOptionsMessage={() => 'Элементы не найдены'}
+      isClearable={true}
+    />
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/Select/Select.tsx"
+import ReactSelect, { type SingleValue } from 'react-select';
+import { getSelectStyles } from '../../../utils/selectStyles';
+
+interface Option {
+  value: string | number | boolean;
+  label: string;
+}
+
+interface SelectProps {
+  value: string | number | boolean | null;
+  onChange: (value: string | number | boolean | null) => void;
+  options: Option[];
+  placeholder?: string;
+  className?: string;
+  isDisabled?: boolean;
+  isSearchable?: boolean;
+}
+
+export const Select = ({ 
+  value, onChange, options, placeholder, className, isDisabled, isSearchable = false 
+}: SelectProps) => {
+  const selectedOption = options.find(opt => String(opt.value) === String(value)) || null;
+
+  return (
+    <ReactSelect
+      value={selectedOption}
+      onChange={(selected: unknown) => {
+        const opt = selected as SingleValue<Option>;
+        onChange(opt ? opt.value : null);
+      }}
+      options={options}
+      styles={getSelectStyles()}
+      placeholder={placeholder}
+      className={className}
+      isDisabled={isDisabled}
+      isSearchable={isSearchable}
+      noOptionsMessage={() => 'Элементы не найдены'}
+    />
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/SortSelect/SortSelect.module.css"
+.container {
+  width: auto;
+  min-width: 260px;
+  height: 40px;
+}
+
+.dropdown {
+  height: 100%;
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/SortSelect/SortSelect.tsx"
+import { ArrowDownAZ } from 'lucide-react';
+import { clsx } from 'clsx';
+import { DropdownSelect } from '../DropdownSelect/DropdownSelect';
+import styles from './SortSelect.module.css';
+
+interface SortSelectProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  className?: string;
+}
+
+export const SortSelect = ({ value, onChange, options, className }: SortSelectProps) => {
+  return (
+    <div  className={clsx(styles.container, className)}>
+      <DropdownSelect 
+        value={value} 
+        onChange={(val) => onChange(String(val))} 
+        options={options} 
+        icon={<ArrowDownAZ size={18} />}
+        className={styles.dropdown}
+      />
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/Spinner/Spinner.module.css"
+.spinner {
+  animation: spin 1s linear infinite;
+  color: var(--primary-color);
+}
+
+.fullPage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/Spinner/Spinner.tsx"
+import { Loader2 } from 'lucide-react';
+import { clsx } from 'clsx';
+import styles from './Spinner.module.css';
+
+interface SpinnerProps {
+  size?: number;
+  className?: string;
+  fullPage?: boolean;
+}
+
+export const Spinner = ({ size = 24, className, fullPage = false }: SpinnerProps) => {
+  const spinner = <Loader2 size={size} className={clsx(styles.spinner, className)} />;
+
+  if (fullPage) {
+    return <div className={styles.fullPage}>{spinner}</div>;
+  }
+
+  return spinner;
+};
+
+//"C:/exam-test/exam-frontend/src/components/ui/Table/Table.module.css"
+.tableCard {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.tableWrapper {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.tableContent {
+  min-width: max-content;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.table th {
+  padding: 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+.sortable:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.table th svg {
+  vertical-align: middle;
+  margin-left: 4px;
+  margin-bottom: 2px;
+}
+
+.sortIconIdle { 
+  color: var(--text-muted); 
+  opacity: 0.6; 
+}
+.sortIconActive { color: var(--primary-color); }
+
+.table td {
+  padding: 16px;
+  font-size: 14px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+
+.row:hover {
+  background-color: color-mix(in srgb, var(--bg-hover) 40%, transparent);
+}
+
+//"C:/exam-test/exam-frontend/src/components/ui/Table/Table.tsx"
+import type { ReactNode } from 'react';
+import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react';
+import { clsx } from 'clsx';
+import { Spinner } from '../Spinner/Spinner';
+import styles from './Table.module.css';
+
+export const TableCard = ({ children, isLoading }: { children: ReactNode; isLoading?: boolean }) => (
+  <div className={styles.tableCard}>
+    {isLoading ? (
+      <Spinner fullPage size={40} />
+    ) : (
+      <div className={styles.tableWrapper}>
+        <div className={styles.tableContent}>
+          {children}
+        </div>
+      </div>
+    )}
+  </div>
+);
+
+export const Table = ({ children, className }: { children: ReactNode; className?: string }) => (
+  <table className={clsx(styles.table, className)}>{children}</table>
+);
+export const TableHead = ({ children }: { children: ReactNode }) => <thead>{children}</thead>;
+export const TableBody = ({ children }: { children: ReactNode }) => <tbody>{children}</tbody>;
+export const TableRow = ({ children, className, onClick }: 
+  { children: ReactNode; className?: string; onClick?: () => void }) => (
+  <tr className={clsx(styles.row, className)} onClick={onClick}>{children}</tr>
+);
+
+interface ThProps {
+  children: ReactNode;
+  sortField?: string;
+  currentSort?: string[];
+  onSort?: (field: string, isShiftPressed: boolean) => void;
+  className?: string;
+}
+
+export const TableHeader = ({ children, sortField, currentSort, onSort, className }: ThProps) => {
+  const getIcon = () => {
+    if (!sortField || !currentSort) return null;
+    const sortStr = currentSort.find(s => s.startsWith(sortField));
+    if (!sortStr) return <ArrowUpDown size={14} className={styles.sortIconIdle} />;
+    return sortStr.endsWith('asc') ? <ArrowUp size={14} className={styles.sortIconActive} /> : <ArrowDown size={14} className={styles.sortIconActive} />;
+  };
+
+  return (
+    <th
+      className={clsx({ [styles.sortable]: !!sortField }, className)}
+      onClick={(e) => sortField && onSort && onSort(sortField, e.shiftKey)}
+    >
+      {children} {getIcon()}
+    </th>
+  );
+};
+
+export const TableCell = ({ children, className }: { children: ReactNode; className?: string }) => (
+  <td className={className}>{children}</td>
+);
+
+//"C:/exam-test/exam-frontend/src/config/api.ts"
+import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
+import toast from 'react-hot-toast';
+import { useAuthStore } from '../store/authStore';
+import { getBrowserFingerprint } from '../utils/fingerprint';
+import { API_BASE_URL, API_ENDPOINTS } from './constants';
+
+export const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: { 'Content-Type': 'application/json' },
+  timeout: 15000,
+  withCredentials: true,
+  paramsSerializer: (params) => {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '') return;
+      if (Array.isArray(value)) {
+        value.forEach((v) => searchParams.append(key, String(v)));
+      } else {
+        searchParams.append(key, String(value));
+      }
+    });
+    return searchParams.toString();
+  }
+});
+
+let isRefreshing = false;
+let failedQueue: Array<{ resolve: (token: string | null) => void; reject: (reason?: unknown) => void }> = [];
+
+const processQueue = (error: unknown, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) prom.reject(error);
+    else prom.resolve(token);
+  });
+  failedQueue = [];
+};
+
+const translateErrorMessage = (errorCode?: string, msg?: string): string => {
+  if (msg?.includes('Username already exists')) return 'Пользователь с таким логином уже существует.';
+  if (msg?.includes('UserEntity with username') && msg?.includes('not found')) {
+    return 'Пользователь с таким логином не найден.';
+  }
+  if (msg?.includes('Email already exists')) return 'Этот Email уже используется.';
+  if (msg?.includes('Invalid username or password')) return 'Неверный логин или пароль.';
+  if (errorCode === 'DATA_INTEGRITY_VIOLATION') return 'Нарушение уникальности данных.';
+  if (errorCode === 'DTO_VALIDATION_FAILED') return 'Ошибка валидации данных на сервере.';
+  if (errorCode === 'ACCESS_DENIED') return 'Доступ запрещен. Недостаточно прав.';
+  return msg || 'Произошла непредвиденная ошибка сервера';
+};
+
+apiClient.interceptors.request.use((config) => {
+  const token = useAuthStore.getState().accessToken;
+  if (token && config.headers) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError<{ error?: string; message?: string }>) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const status = error.response?.status;
+
+    if (!error.response) {
+      toast.error('Сервер недоступен. Проверьте подключение к сети.');
+      return Promise.reject(error);
+    }
+
+    if (status === 401 && originalRequest && !originalRequest._retry) {
+      if (originalRequest.url?.includes(API_ENDPOINTS.AUTH.REFRESH) || originalRequest.url?.includes(API_ENDPOINTS.AUTH.LOGIN)) {
+        useAuthStore.getState().logout();
+        return Promise.reject(error);
+      }
+
+      if (isRefreshing) {
+        return new Promise<string | null>((resolve, reject) => failedQueue.push({ resolve, reject }))
+          .then((token) => {
+            if (token && originalRequest.headers) originalRequest.headers.Authorization = `Bearer ${token}`;
+            return apiClient(originalRequest);
+          })
+          .catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const fingerprint = getBrowserFingerprint();
+        const { data } = await axios.post(`${API_BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`, { fingerprint }, { withCredentials: true });
+        useAuthStore.getState().setAuth(data.accessToken, { username: data.username, role: data.role });
+        processQueue(null, data.accessToken);
+        if (originalRequest.headers) originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        useAuthStore.getState().logout();
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    if (status !== 401) {
+      toast.error(translateErrorMessage(error.response?.data?.error, error.response?.data?.message));
+    }
+    return Promise.reject(error);
+  }
+);
+
+//"C:/exam-test/exam-frontend/src/config/constants.ts"
+export const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*_=+-]).{8,60}$/;
+export const API_BASE_URL = '/api/v1';
+
+const AUTH_BASE = '/auth';
+const USERS_BASE = '/users';
+const LOGS_BASE = '/logs';
+
+export const API_ENDPOINTS = {
+  AUTH: {
+    LOGIN: `${AUTH_BASE}/login`,
+    REGISTER: `${AUTH_BASE}/register`,
+    REFRESH: `${AUTH_BASE}/refresh`,
+    LOGOUT: `${AUTH_BASE}/logout`,
+  },
+  USERS: {
+    BASE: USERS_BASE,
+    ME: `${USERS_BASE}/me`,
+    PASSWORD: `${USERS_BASE}/me/password`,
+    DETAILS: (id: number | string) => `${USERS_BASE}/${id}`,
+    REVOKE_SESSIONS: (id: number | string) => `${USERS_BASE}/${id}/revoke-sessions`,
+  },
+  LOGS: {
+    FILES: `${LOGS_BASE}/files`,
+    TAIL: `${LOGS_BASE}/tail`,
+    DOWNLOAD: `${LOGS_BASE}/download`
+  }
+} as const;
+
+//"C:/exam-test/exam-frontend/src/features/admin/components/UserFilters/UserFilters.tsx"
+import { FilterSidebar } from '../../../../components/ui/FilterSidebar/FilterSidebar';
+import { AuditDateFilters, StaticSelectFilter } from '../../../filters/components/FilterBlocks/FilterBlocks';
+import type { CommonFilters } from '../../../../hooks/useUrlFilters';
+import type { UserFiltersType } from '../../../../pages/UsersPage/usersParser';
+import type { UserRole } from '../../../../types/auth';
+
+interface UserFiltersProps {
+  isOpen: boolean;
+  onClose: () => void;
+  filters: CommonFilters & UserFiltersType;
+  updateFilters: (updates: Partial<CommonFilters & UserFiltersType>) => void;
+  resetFilters: () => void;
+}
+
+export const UserFilters = ({ isOpen, onClose, filters, updateFilters, resetFilters }: UserFiltersProps) => {
+  return (
+    <FilterSidebar title="Фильтры" isOpen={isOpen} onClose={onClose} onReset={resetFilters}>
+      <StaticSelectFilter 
+        label="Роль пользователя"
+        value={filters.roles?.[0] || ''}
+        onChange={(val) => updateFilters({ roles: val ? [val as UserRole] : [] })}
+        options={[
+          { value: '', label: 'Все роли' },
+          { value: 'SUPERADMIN', label: 'Суперадминистраторы' },
+          { value: 'ADMIN', label: 'Администраторы' },
+          { value: 'USER', label: 'Обычные пользователи' }
+        ]}
+      />
+      <AuditDateFilters filters={filters} updateFilters={updateFilters} />
+    </FilterSidebar>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/features/auth/components/AuthForms.module.css"
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.req {
+  color: var(--status-critical);
+}
+
+.submitBtn {
+  margin-top: 8px;
+  height: 44px;
+}
+
+.footerText {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.linkBtn {
+  background: transparent;
+  border: none;
+  color: var(--primary-color);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+}
+
+.linkBtn:hover {
+  text-decoration: underline;
+}
+
+//"C:/exam-test/exam-frontend/src/features/auth/components/LoginModal.tsx"
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation } from '@tanstack/react-query';
+import { loginSchema, type LoginFormData } from '../../../schemas/authSchemas';
+import { authService } from '../../../services/auth.service';
+import { useAuthStore } from '../../../store/authStore';
+import { Modal } from '../../../components/ui/Modal/Modal';
+import { Input } from '../../../components/ui/Input/Input';
+import { Button } from '../../../components/ui/Button/Button';
+import styles from './AuthForms.module.css';
+
+interface Props { isOpen: boolean; onClose: () => void; onSwitchToRegister: () => void; }
+
+export const LoginModal = ({ isOpen, onClose, onSwitchToRegister }: Props) => {
+  const setAuth = useAuthStore((s) => s.setAuth);
+
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
+    mode: 'onTouched'
+  });
+
+  const mutation = useMutation({
+    mutationFn: (data: LoginFormData) => authService.login(data.username, data.password),
+    onSuccess: (data) => {
+      setAuth(data.accessToken, { username: data.username, role: data.role });
+      reset();
+      onClose();
+    }
+  });
+
+  const onSubmit = (data: LoginFormData) => mutation.mutate(data);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Вход в систему">
+      <form onSubmit={handleSubmit(onSubmit)} className={styles.form}>
+        <div className={styles.field}>
+          <label>Логин</label>
+          <Input {...register('username')} placeholder="Введите логин" error={errors.username?.message} />
+        </div>
+        <div className={styles.field}>
+          <label>Пароль</label>
+          <Input type="password" {...register('password')} placeholder="••••••••" error={errors.password?.message} />
+        </div>
+        <Button type="submit" isLoading={mutation.isPending} className={styles.submitBtn}>Войти</Button>
+        <div className={styles.footerText}>
+          Нет аккаунта? <button type="button" onClick={onSwitchToRegister} className={styles.linkBtn}>Зарегистрироваться</button>
+        </div>
+      </form>
+    </Modal>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/features/auth/components/RegisterModal.tsx"
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation } from '@tanstack/react-query';
+import { registerSchema, type RegisterFormData } from '../../../schemas/authSchemas';
+import { authService } from '../../../services/auth.service';
+import { useAuthStore } from '../../../store/authStore';
+import { Modal } from '../../../components/ui/Modal/Modal';
+import { Input } from '../../../components/ui/Input/Input';
+import { Button } from '../../../components/ui/Button/Button';
+import styles from './AuthForms.module.css';
+
+interface Props { isOpen: boolean; onClose: () => void; onSwitchToLogin: () => void; }
+
+export const RegisterModal = ({ isOpen, onClose, onSwitchToLogin }: Props) => {
+  const setAuth = useAuthStore((s) => s.setAuth);
+
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<RegisterFormData>({
+    resolver: zodResolver(registerSchema),
+    mode: 'onTouched',
+  });
+
+  const mutation = useMutation({
+    mutationFn: (data: RegisterFormData) => authService.register(data.username, data.email, data.password),
+    onSuccess: (data) => {
+      setAuth(data.accessToken, { username: data.username, role: data.role });
+      reset();
+      onClose();
+    }
+  });
+
+  const onSubmit = (data: RegisterFormData) => mutation.mutate(data);
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Регистрация">
+      <form onSubmit={handleSubmit(onSubmit)} className={styles.form}>
+        <div className={styles.field}>
+          <label>Логин <span className={styles.req}>*</span></label>
+          <Input {...register('username')} placeholder="Придумайте логин" error={errors.username?.message} />
+        </div>
+        <div className={styles.field}>
+          <label>Email <span className={styles.req}>*</span></label>
+          <Input type="email" {...register('email')} placeholder="example@mail.com" error={errors.email?.message} />
+        </div>
+        <div className={styles.field}>
+          <label>Пароль <span className={styles.req}>*</span></label>
+          <Input type="password" {...register('password')} placeholder="Надежный пароль" error={errors.password?.message} />
+        </div>
+        <div className={styles.field}>
+          <label>Подтвердите пароль <span className={styles.req}>*</span></label>
+          <Input type="password" {...register('confirmPassword')} placeholder="Повторите пароль" error={errors.confirmPassword?.message} />
+        </div>
+        <Button type="submit" isLoading={mutation.isPending} className={styles.submitBtn}>Создать аккаунт</Button>
+        <div className={styles.footerText}>
+          Уже есть аккаунт? <button type="button" onClick={onSwitchToLogin} className={styles.linkBtn}>Войти</button>
+        </div>
+      </form>
+    </Modal>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/features/filters/components/FilterBlocks/FilterBlocks.tsx"
+import { SearchableSelect } from '../../../../components/ui/SearchableSelect/SearchableSelect';
+import { Select } from '../../../../components/ui/Select/Select';
+import { type SelectOption } from '../../../../types/common';
+import type { FilterValue } from '../../../../hooks/useUrlFilters';
+import styles from '../../styles/filterForms.module.css';
+
+type UpdateFiltersFn = (updates: Record<string, FilterValue>) => void;
+
+interface MultiSelectProps {
+  label: string;
+  value: (string | number)[];
+  onChange: (val: (string | number)[]) => void;
+  fetchOptions: (s?: string) => Promise<SelectOption[]>;
+  fetchByIds: (ids: (string | number)[]) => Promise<SelectOption[]>;
+  placeholder?: string;
+}
+
+export const MultiSelectFilter = ({ label, value, onChange, fetchOptions, fetchByIds, placeholder }: MultiSelectProps) => (
+  <div className={styles.filterGroup}>
+    <label className={styles.label}>{label}</label>
+    <SearchableSelect
+      isMulti
+      value={value}
+      onChange={(val) => onChange((val as (string | number)[]) ??[])} 
+      fetchOptions={fetchOptions}
+      fetchByIds={fetchByIds}
+      placeholder={placeholder}
+    />
+  </div>
+);
+
+interface StaticSelectProps {
+  label: string;
+  value: string | number | boolean | null;
+  onChange: (val: string | number | boolean | null) => void;
+  options: { value: string | number | boolean; label: string }[];
+}
+
+export const StaticSelectFilter = ({ label, value, onChange, options }: StaticSelectProps) => (
+  <div className={styles.filterGroup}>
+    <label className={styles.label}>{label}</label>
+    <Select value={value} onChange={onChange} options={options} isSearchable={false} />
+  </div>
+);
+
+interface DateRangeProps {
+  filters: Record<string, FilterValue>;
+  updateFilters: UpdateFiltersFn;
+  label: string;
+  fromKey: string;
+  toKey: string;
+}
+
+export const DateRangeFilters = ({ filters, updateFilters, label, fromKey, toKey }: DateRangeProps) => (
+  <div className={styles.hierarchyGroup}>
+    <h4 className={styles.hierarchyTitle}>{label}</h4>
+    <div className={styles.filterGroup}>
+      <label className={styles.label}>От</label>
+      <input type="datetime-local" step="1" className={styles.nativeInput}
+        value={(filters[fromKey] as string) || ''}
+        onChange={(e) => updateFilters({ [fromKey]: e.target.value })}
+      />
+    </div>
+    <div className={styles.filterGroup}>
+      <label className={styles.label}>До</label>
+      <input type="datetime-local" step="1" className={styles.nativeInput}
+        value={(filters[toKey] as string) || ''}
+        onChange={(e) => updateFilters({ [toKey]: e.target.value })}
+      />
+    </div>
+  </div>
+);
+
+interface AuditDateProps {
+  filters: Record<string, FilterValue>;
+  updateFilters: UpdateFiltersFn;
+}
+
+export const AuditDateFilters = ({ filters, updateFilters }: AuditDateProps) => (
+  <>
+    <DateRangeFilters 
+      label="Дата создания" 
+      fromKey="createdAfter" 
+      toKey="createdBefore" 
+      filters={filters} 
+      updateFilters={updateFilters} 
+    />
+    <DateRangeFilters 
+      label="Дата обновления" 
+      fromKey="updatedAfter" 
+      toKey="updatedBefore" 
+      filters={filters} 
+      updateFilters={updateFilters} 
+    />
+  </>
+);
+
+interface NumberRangeProps {
+  filters: Record<string, FilterValue>;
+  updateFilters: UpdateFiltersFn;
+  label: string;
+  minKey: string;
+  maxKey: string;
+}
+
+export const NumberRangeFilter = ({ filters, updateFilters, label, minKey, maxKey }: NumberRangeProps) => (
+  <div className={styles.hierarchyGroup}>
+    <h4 className={styles.hierarchyTitle}>{label}</h4>
+    <div className={styles.filterGroup}>
+      <label className={styles.label}>От</label>
+      <input type="number" className={styles.nativeInput} placeholder="Минимум"
+        value={(filters[minKey] as number) || ''}
+        onChange={(e) => updateFilters({ [minKey]: e.target.value ? Number(e.target.value) : undefined })}
+      />
+    </div>
+    <div className={styles.filterGroup}>
+      <label className={styles.label}>До</label>
+      <input type="number" className={styles.nativeInput} placeholder="Максимум"
+        value={(filters[maxKey] as number) || ''}
+        onChange={(e) => updateFilters({[maxKey]: e.target.value ? Number(e.target.value) : undefined })}
+      />
+    </div>
+  </div>
+);
+
+//"C:/exam-test/exam-frontend/src/features/filters/styles/filterForms.module.css"
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nativeInput {
+  width: 100%;
+  height: 40px;
+  padding: 8px 12px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+}
+.nativeInput:focus {
+  border-color: var(--primary-color);
+}
+
+.hierarchyGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background-color: color-mix(in srgb, var(--bg-hover) 40%, transparent);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--border-color);
+  margin: 4px 0;
+}
+
+.hierarchyTitle {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: -4px;
+}
+
+@media (max-width: 480px) {
+  .hierarchyGroup {
+    padding: 12px;
+    gap: 12px;
+  }
+}
+
+//"C:/exam-test/exam-frontend/src/hooks/useDebounce.ts"
+import { useState, useEffect } from 'react';
+
+export function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedValue(value);
+    }, delay);
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [value, delay]);
+
+  return debouncedValue;
+}
+
+//"C:/exam-test/exam-frontend/src/hooks/useDocumentTitle.ts"
+import { useEffect } from 'react';
+
+export const useDocumentTitle = (title: string) => {
+  useEffect(() => {
+    document.title = `${title} | Exam`;
+  }, [title]);
+};
+
+//"C:/exam-test/exam-frontend/src/hooks/useUrlFilters.ts"
+import { useSearchParams } from 'react-router-dom';
+
+export type FilterValue = string | number | boolean | (string | number)[] | null | undefined;
+
+export const getNumberArray = (searchParams: URLSearchParams, key: string): number[] => {
+  const val = searchParams.get(key);
+  return val ? val.split(',').map(Number).filter(n => !isNaN(n)) :[];
+};
+
+export const getNumber = (searchParams: URLSearchParams, key: string): number | undefined => {
+  const val = searchParams.get(key);
+  return val ? Number(val) : undefined;
+};
+
+export const getBoolean = (searchParams: URLSearchParams, key: string): boolean | undefined => {
+  const val = searchParams.get(key);
+  return val === 'true' ? true : val === 'false' ? false : undefined;
+};
+
+export const getString = (searchParams: URLSearchParams, key: string): string => {
+  return searchParams.get(key) || '';
+};
+
+export const getStringArray = (searchParams: URLSearchParams, key: string): string[] => {
+  const val = searchParams.get(key);
+  return val ? val.split(',').filter(Boolean) :[];
+};
+
+export interface CommonFilters {
+  [key: string]: FilterValue;
+  page?: number;
+  size?: number;
+  search?: string;
+  sort: string[];
+}
+
+export const useUrlFilters = <T extends Record<string, FilterValue>>(
+  defaultSort: string | string[],
+  parseExtraFilters: (params: URLSearchParams) => T
+) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const commonFilters: CommonFilters = {
+    page: Number(searchParams.get('page')) || 0,
+    size: Number(searchParams.get('size')) || 12,
+    search: searchParams.get('search') || '',
+    sort: searchParams.getAll('sort').length > 0 ? searchParams.getAll('sort') : (Array.isArray(defaultSort) ? defaultSort :[defaultSort]),
+  };
+
+  const filters = { ...commonFilters, ...parseExtraFilters(searchParams) };
+
+  const updateFilters = (updates: Partial<CommonFilters & T>, resetPage = true) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      
+      Object.entries(updates).forEach(([key, value]) => {
+        next.delete(key); 
+        if (value === null || value === '' || value === undefined || (Array.isArray(value) && value.length === 0)) {
+          return; 
+        }
+        if (Array.isArray(value) && key === 'sort') {
+          value.forEach(v => next.append(key, String(v)));
+        } else if (Array.isArray(value)) {
+          next.set(key, value.join(','));
+        } else {
+          next.set(key, String(value));
+        }
+      });
+      
+      if (resetPage && updates.page === undefined) next.set('page', '0');
+      return next;
+    });
+  };
+
+  const resetFilters = () => setSearchParams(new URLSearchParams());
+
+  return { filters, updateFilters, resetFilters };
+};
+
+//"C:/exam-test/exam-frontend/src/layouts/AdminLayout/AdminLayout.module.css"
+.layout {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+}
+
+.sidebar {
+  width: 290px;
+  background-color: var(--bg-surface);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  transition: width var(--transition);
+  z-index: 10;
+}
+.sidebar.closed {
+  width: 70px;
+}
+
+.sidebarHeader {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-decoration: none;
+}
+.logoIcon {
+  color: var(--primary-color);
+  flex-shrink: 0;
+}
+
+.nav {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.navIcon {
+  flex-shrink: 0;
+  min-width: 20px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-weight: 500;
+  transition: var(--transition);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.navItem:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+.navItem.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.mainWrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  height: 64px;
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.headerLeft, .headerRight {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pageTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.iconButton {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+.iconButton:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.profileWrapper {
+  position: relative;
+}
+
+.userProfile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border-color);
+  cursor: pointer;
+  user-select: none;
+}
+
+.chevron {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+.chevron.rotated {
+  transform: rotate(180deg);
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  width: 220px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: 8px 0;
+  z-index: 100;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.dropdownItem:hover {
+  background-color: var(--bg-hover);
+}
+
+.dropdownDivider {
+  height: 1px;
+  background-color: var(--border-color);
+  margin: 4px 0;
+}
+
+.logoutBtn {
+  color: var(--status-critical);
+}
+.logoutBtn:hover {
+  background-color: color-mix(in srgb, var(--status-critical) 10%, transparent);
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.userInfo {
+  display: flex;
+  flex-direction: column;
+}
+.userName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.userRole {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.sidebarBackdrop {
+  display: none;
+}
+
+@media (max-width: 830px) {
+  .userRole, .userName {
+    display: none;
+  }
+
+  .sidebarBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background-color: rgba(15, 23, 42, 0.4);
+    z-index: 9;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition);
+  }
+  .sidebarBackdrop.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar {
+    position: fixed;
+    height: 100vh;
+    left: 0;
+    top: 0;
+    transform: translateX(0);
+    box-shadow: 4px 0 10px rgba(0,0,0,0.1);
+    z-index: 10;
+  }
+  .sidebar.closed {
+    transform: translateX(-100%);
+    width: 280px; 
+  }
+}
+
+@media (max-width: 630px) {
+  .header {
+    padding: 0 16px;
+  }
+  .headerLeft, .headerRight {
+    gap: 8px;
+  }
+  .userProfile {
+    padding-left: 12px;
+  }
+  .pageTitle {
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+  }
+  .content {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 380px) {
+  .sidebar.closed {
+    width: 100vw;
+  }
+  .pageTitle {
+    display: none;
+  }
+  .content {
+    padding: 12px;
+  }
+}
+
+//"C:/exam-test/exam-frontend/src/layouts/AdminLayout/AdminLayout.tsx"
+import { useState, useRef, useEffect } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { clsx } from 'clsx';
+import { Users, Terminal, LogOut, Sun, Moon, Menu, Shield, ChevronDown, User, Monitor } from 'lucide-react';
+import { ROLE_LABELS } from '../../types/auth';
+import { useUiStore } from '../../store/uiStore';
+import { useAuthStore } from '../../store/authStore';
+import { authService } from '../../services/auth.service';
+import styles from './AdminLayout.module.css';
+
+export const AdminLayout = () => {
+  const { theme, toggleTheme, isSidebarOpen, toggleSidebar } = useUiStore();
+  const { user, logout } = useAuthStore();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setIsProfileOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleClick = () => { if (window.innerWidth <= 630) toggleSidebar(); };
+
+  const handleLogout = async () => {
+    try { await authService.logout(); } 
+    finally { logout(); navigate('/'); }
+  };
+
+  return (
+    <div className={styles.layout}>
+       <div className={clsx(styles.sidebarBackdrop, { [styles.open]: isSidebarOpen })} onClick={toggleSidebar} />
+       
+      <aside className={clsx(styles.sidebar, { [styles.closed]: !isSidebarOpen })}>
+        <div className={styles.sidebarHeader}>
+          <Link to="/" className={styles.logo}>
+            <Shield size={24} className={styles.logoIcon} />
+            {isSidebarOpen && <span>Админ-панель</span>}
+          </Link>
+        </div>
+        
+        <nav className={styles.nav}>
+          {[
+            { path: '/admin/users', label: 'Пользователи', icon: Users },
+            { path: '/admin/logs', label: 'Системные логи', icon: Terminal }
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link 
+                key={item.path} to={item.path} onClick={handleClick}
+                className={clsx(styles.navItem, { [styles.active]: location.pathname.includes(item.path) })}
+              >
+                <Icon size={20} className={styles.navIcon} />
+                {isSidebarOpen && <span>{item.label}</span>}
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
+
+      <div className={styles.mainWrapper}>
+        <header className={styles.header}>
+          <div className={styles.headerLeft}>
+            <button onClick={toggleSidebar} className={styles.iconButton}><Menu size={20} /></button>
+            <h2 className={styles.pageTitle}>Управление системой</h2>
+          </div>
+          
+          <div className={styles.headerRight}>
+            <Link to="/" className={styles.iconButton} title="На сайт"><Monitor size={20} /></Link>
+            <button onClick={toggleTheme} className={styles.iconButton} title="Сменить тему">
+              {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+            </button>
+            
+            <div className={styles.profileWrapper} ref={profileRef}>
+              <div className={styles.userProfile} onClick={() => setIsProfileOpen(!isProfileOpen)}>
+                <div className={styles.avatar}>{user?.username.charAt(0).toUpperCase()}</div>
+                <div className={styles.userInfo}>
+                  <span className={styles.userName}>{user?.username}</span>
+                  <span className={styles.userRole}>{user ? ROLE_LABELS[user.role] : ''}</span>
+                </div>
+                <ChevronDown size={16} className={clsx(styles.chevron, { [styles.rotated]: isProfileOpen })} />
+              </div>
+              
+              {isProfileOpen && (
+                <div className={styles.dropdownMenu}>
+                  <Link to="/profile" className={styles.dropdownItem} onClick={() => setIsProfileOpen(false)}>
+                    <User size={16} /> Мой профиль
+                  </Link>
+                  <div className={styles.dropdownDivider} />
+                  <button className={clsx(styles.dropdownItem, styles.logoutBtn)} onClick={handleLogout}>
+                    <LogOut size={16} /> Выйти
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <main className={styles.content}>
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/layouts/components/Header/Header.module.css"
+.header {
+  height: 64px;
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logoIcon {
+  color: var(--primary-color);
+}
+
+.rightSide {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.authButtons {
+  display: flex;
+  gap: 12px;
+}
+
+.profileWrapper { position: relative; }
+.userProfile {
+  display: flex; align-items: center; gap: 12px;
+  padding-left: 16px; border-left: 1px solid var(--border-color);
+  cursor: pointer; user-select: none;
+}
+.avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background-color: var(--primary-color); color: white;
+  display: flex; align-items: center; justify-content: center; font-weight: 600;
+}
+.userInfo { display: flex; flex-direction: column; }
+.userName { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.userRole { font-size: 12px; color: var(--text-muted); }
+.chevron { color: var(--text-muted); transition: transform 0.2s; }
+.chevron.rotated { transform: rotate(180deg); }
+
+.dropdownMenu {
+  position: absolute; top: calc(100% + 12px); right: 0; width: 220px;
+  background-color: var(--bg-surface); border: 1px solid var(--border-color);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-md); padding: 8px 0;
+  animation: slideDown 0.2s ease-out;
+}
+.dropdownItem {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 10px 16px; font-size: 14px; font-weight: 500; color: var(--text-primary);
+  background: transparent; border: none; cursor: pointer; text-decoration: none;
+}
+.dropdownItem:hover { background-color: var(--bg-hover); }
+.dropdownDivider { height: 1px; background-color: var(--border-color); margin: 4px 0; }
+.logoutBtn { color: var(--status-critical); }
+
+@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+.iconButton {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+.iconButton:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+@media (max-width: 600px) {
+  .userName, .userRole { display: none; }
+}
+
+@media (max-width: 500px) {
+  .logoText {
+    display: none;
+  }
+  .rightSide {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 370px) {
+  .header {
+    padding: 0 12px;
+  }
+  .authButtons {
+    gap: 4px;
+  }
+  .mobileBtn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
+
+//"C:/exam-test/exam-frontend/src/layouts/components/Header/Header.tsx"
+import { useState, useRef, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Shield, User, LogOut, ChevronDown, LayoutDashboard, Sun, Moon } from 'lucide-react';
+import { clsx } from 'clsx';
+import { useAuthStore } from '../../../store/authStore';
+import { useUiStore } from '../../../store/uiStore';
+import { authService } from '../../../services/auth.service';
+import { ROLE_LABELS } from '../../../types/auth';
+import { Button } from '../../../components/ui/Button/Button';
+import { LoginModal } from '../../../features/auth/components/LoginModal';
+import { RegisterModal } from '../../../features/auth/components/RegisterModal';
+import styles from './Header.module.css';
+
+export const Header = () => {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { theme, toggleTheme } = useUiStore();
+  const { user, isAuthenticated, isAdmin, logout } = useAuthStore();
+
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  const authParam = searchParams.get('auth');
+  const isLoginOpen = authParam === 'login';
+  const isRegisterOpen = authParam === 'register';
+
+  const setAuthModal = (type: 'login' | 'register' | null) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (type) next.set('auth', type);
+      else next.delete('auth');
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setIsProfileOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLogout = async () => {
+    try { await authService.logout(); } 
+    finally { logout(); navigate('/'); }
+  };
+
+  return (
+    <>
+      <header className={styles.header}>
+        <Link to="/" className={styles.logo}>
+          <Shield size={24} className={styles.logoIcon} />
+          <span className={styles.logoText}>ExamApp</span>
+        </Link>
+
+        <div className={styles.rightSide}>
+          <button onClick={toggleTheme} className={styles.iconButton} title="Сменить тему">
+            {theme === 'light' ? <Moon size={20} /> : <Sun size={20} />}
+          </button>
+
+          {!isAuthenticated ? (
+            <div className={styles.authButtons}>
+              <Button variant="ghost" onClick={() => setAuthModal('login')} className={styles.mobileBtn}>Вход</Button>
+              <Button onClick={() => setAuthModal('register')} className={styles.mobileBtn}>Регистрация</Button>
+            </div>
+          ) : (
+            <div className={styles.profileWrapper} ref={profileRef}>
+              <div className={styles.userProfile} onClick={() => setIsProfileOpen(!isProfileOpen)}>
+                <div className={styles.avatar}>{user?.username.charAt(0).toUpperCase()}</div>
+                <div className={styles.userInfo}>
+                  <span className={styles.userName}>{user?.username}</span>
+                  <span className={styles.userRole}>{user ? ROLE_LABELS[user.role] : ''}</span>
+                </div>
+                <ChevronDown size={16} className={clsx(styles.chevron, { [styles.rotated]: isProfileOpen })} />
+              </div>
+              
+              {isProfileOpen && (
+                <div className={styles.dropdownMenu}>
+                  <Link to="/profile" className={styles.dropdownItem} onClick={() => setIsProfileOpen(false)}>
+                    <User size={16} /> Мой профиль
+                  </Link>
+                  <div className={styles.dropdownDivider} />
+                  {isAdmin && (
+                    <>
+                      <Link to="/admin" className={styles.dropdownItem} onClick={() => setIsProfileOpen(false)}>
+                        <LayoutDashboard size={16} /> Админ-панель
+                      </Link>
+                      <div className={styles.dropdownDivider} />
+                    </>
+                  )}
+                  <button className={clsx(styles.dropdownItem, styles.logoutBtn)} onClick={handleLogout}>
+                    <LogOut size={16} /> Выйти
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </header>
+      
+      <LoginModal isOpen={isLoginOpen} onClose={() => setAuthModal(null)} onSwitchToRegister={() => setAuthModal('register')} />
+      <RegisterModal isOpen={isRegisterOpen} onClose={() => setAuthModal(null)} onSwitchToLogin={() => setAuthModal('login')} />
+    </>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/layouts/MainLayout/MainLayout.module.css"
+.layout { 
+  display: flex; 
+  flex-direction: column; 
+  min-height: 100vh; 
+  width: 100%;             
+  background-color: var(--bg-primary); 
+}
+
+.main { 
+  flex: 1; 
+  padding: 24px; 
+  display: flex; 
+  justify-content: center; 
+}
+
+.container { 
+  width: 100%; 
+  max-width: 1200px; 
+}
+
+@media (max-width: 600px) {
+  .main {
+    padding: 16px;
+  }
+}
+
+//"C:/exam-test/exam-frontend/src/layouts/MainLayout/MainLayout.tsx"
+import { Outlet } from 'react-router-dom';
+import { Header } from '../components/Header/Header';
+import styles from './MainLayout.module.css';
+
+export const MainLayout = () => {
+  return (
+    <div className={styles.layout}>
+      <Header />
+      <main className={styles.main}>
+        <div className={styles.container}>
+          <Outlet />
+        </div>
+      </main>
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/pages/LogsPage/LogsPage.module.css"
+.container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 112px);
+  gap: 16px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-shrink: 0;
+  gap: 16px;
+  container-type: inline-size;
+  container-name: logsHeader;
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 400px;
+  min-width: 0;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.controlsArea {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  flex: 1 1 480px;
+  max-width: 600px;
+  min-width: 0;
+}
+
+.searchContainer { width: 100%; }
+
+.actionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+  align-items: center;
+  width: 100%;
+}
+
+.fileSelect {
+  flex: 1 1 290px;
+  min-width: min(290px, 100%);
+}
+
+.actionButtons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.actionButtons button {
+  height: 40px;
+}
+
+@container logsHeader (max-width: 900px) {
+  .controlsArea {
+    max-width: 100%;
+  }
+}
+
+.terminalWrapper {
+  flex: 1;
+  background-color: #0f172a;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  padding: 16px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  min-height: 200px;
+}
+
+.logLine {
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-bottom: 2px;
+}
+
+.highlight {
+  background-color: rgba(250, 204, 21, 0.3);
+  color: #fef08a;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.logInfo    { color: #38bdf8; }
+.logWarn    { color: #facc15; }
+.logError   { color: #f87171; font-weight: bold; }
+.logDebug   { color: #94a3b8; }
+.logDefault { color: #f8fafc; }
+
+@media (max-width: 1100px) {
+  .container {
+    height: auto;
+    flex: 1;
+  }
+  .terminalWrapper {
+    height: calc(100vh - 280px);
+    min-height: 300px;
+  }
+}
+
+@media (max-width: 600px) {
+  .title    { font-size: 20px; }
+  .subtitle { font-size: 13px; }
+  .terminalWrapper {
+    height: calc(100vh - 310px);
+    min-height: 250px;
+  }
+}
+
+@media (max-width: 480px) {
+  .actionButtons {
+    width: 100%;
+  }
+  .actionButtons button {
+    flex: 1;
+  }
+  .fileSelect { flex: 1 1 100%; }
+  .terminalWrapper {
+    padding: 12px;
+    font-size: 12px;
+    height: calc(100vh - 340px);
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 400px) {
+  .title    { font-size: 18px; }
+  .subtitle { font-size: 12px; }
+  .terminalWrapper {
+    padding: 10px;
+    min-height: 200px;
+  }
+}
+
+//"C:/exam-test/exam-frontend/src/pages/LogsPage/LogsPage.tsx"
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Download, RefreshCw, Search } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { clsx } from 'clsx';
+import { isAxiosError } from 'axios';
+import { toast } from 'react-hot-toast/headless';
+import { logsService } from '../../services/logs.service';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { saveBlobAsFile } from '../../utils/downloadUtils';
+import { Button } from '../../components/ui/Button/Button';
+import { Select } from '../../components/ui/Select/Select';
+import { Input } from '../../components/ui/Input/Input';
+import { Spinner } from '../../components/ui/Spinner/Spinner';
+import styles from './LogsPage.module.css';
+
+export const LogsPage = () => {
+  useDocumentTitle('Системные логи');
+  
+  const [selectedFile, setSelectedFile] = useState<string>('');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [isDownloading, setIsDownloading] = useState(false);
+  const terminalRef = useRef<HTMLDivElement>(null);
+
+  const { data: files } = useQuery({
+    queryKey: ['logFiles'],
+    queryFn: logsService.getFiles
+  });
+
+  const { data: lines, isLoading, isFetching, refetch } = useQuery({
+    queryKey: ['logTail', selectedFile],
+    queryFn: () => logsService.getTail(selectedFile || undefined, 1000),
+    refetchInterval: selectedFile === '' || selectedFile === 'application.log' ? 60000 : false
+  });
+
+  const filteredLines = useMemo(() => {
+    if (!lines) return [];
+    if (!searchTerm.trim()) return lines;
+    const lowerSearch = searchTerm.toLowerCase();
+    return lines.filter(line => line.toLowerCase().includes(lowerSearch));
+  }, [lines, searchTerm]);
+
+  useEffect(() => {
+    if (terminalRef.current && !searchTerm) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [lines, searchTerm]);
+
+  const fileOptions = files?.map(f => {
+    const sizeMb = (f.sizeBytes / 1024 / 1024).toFixed(2);
+    const date = new Date(f.lastModified).toLocaleDateString('ru-RU');
+    return {
+      value: f.filename,
+      label: `${f.filename} (${sizeMb} MB) — ${date}`
+    };
+  }) || [];
+
+  const handleDownload = async () => {
+    try {
+      setIsDownloading(true);
+      const blob = await logsService.downloadLog(selectedFile || undefined);
+      saveBlobAsFile(blob, selectedFile || 'application.log');
+    } catch (e) {
+      if (!isAxiosError(e)) {
+        toast.error('Внутренняя ошибка при скачивании файла логов');
+        console.error(e);
+      }
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const highlightText = (text: string, highlight: string) => {
+    if (!highlight.trim()) return text;
+    const parts = text.split(new RegExp(`(${highlight})`, 'gi'));
+    return parts.map((part, i) => 
+      part.toLowerCase() === highlight.toLowerCase() ? (
+        <span key={i} className={styles.highlight}>{part}</span>
+      ) : part
+    );
+  };
+
+  const getLineClass = (line: string) => {
+    if (line.includes(' ERROR ')) return styles.logError;
+    if (line.includes(' WARN ')) return styles.logWarn;
+    if (line.includes(' INFO ')) return styles.logInfo;
+    if (line.includes(' DEBUG ')) return styles.logDebug;
+    return styles.logDefault;
+  };
+
+  return (
+    <div className={styles.container}>
+      <div className={styles.header}>
+        <div className={styles.titleBlock}>
+          <h1 className={styles.title}>События системы (логи)</h1>
+          <p className={styles.subtitle}>Мониторинг работы алгоритмов и состояния сервера</p>
+        </div>
+        
+        <div className={styles.controlsArea}>
+          <div className={styles.searchContainer}>
+            <Input 
+              icon={<Search size={16} />}
+              placeholder="Поиск по тексту..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onClear={() => setSearchTerm('')}
+            />
+          </div>
+
+          <div className={styles.actionRow}>
+            <div className={styles.fileSelect}>
+              <Select 
+                value={selectedFile}
+                onChange={(val) => {
+                  setSelectedFile(val as string);
+                  setSearchTerm('');
+                }}
+                options={[{ value: '', label: 'Текущий лог (application.log)' }, ...fileOptions.filter(o => o.value !== 'application.log')]}
+              />
+            </div>
+            
+            <div className={styles.actionButtons}>
+              <Button variant="secondary" onClick={() => refetch()} isLoading={isFetching}>
+                <RefreshCw size={16} /> Обновить
+              </Button>
+              <Button onClick={handleDownload} isLoading={isDownloading}>
+                <Download size={16} /> Скачать
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className={styles.terminalWrapper} ref={terminalRef}>
+        {isLoading ? (
+          <Spinner fullPage />
+        ) : filteredLines.length === 0 ? (
+          <div className={styles.logDefault}>
+            {searchTerm ? 'По вашему запросу ничего не найдено.' : 'Файл логов пуст.'}
+          </div>
+        ) : (
+          filteredLines.map((line, idx) => (
+            <div key={idx} className={clsx(styles.logLine, getLineClass(line))}>
+              {highlightText(line, searchTerm)}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/pages/UserEditPage/UserEditPage.tsx"
+import { useParams, useNavigate } from 'react-router-dom';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeft, Save, AlertTriangle } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
+import { isAxiosError } from 'axios';
+import { useAuthStore } from '../../store/authStore';
+import { usersService } from '../../services/users.service';
+import { createUserSchema, updateUserSchema } from '../../schemas/userSchemas';
+import { Input } from '../../components/ui/Input/Input';
+import { Button } from '../../components/ui/Button/Button';
+import { Select } from '../../components/ui/Select/Select';
+import { Card } from '../../components/ui/Card/Card';
+import { Spinner } from '../../components/ui/Spinner/Spinner';
+import { ErrorState } from '../../components/ui/ErrorState/ErrorState';
+import { formatDateTime } from '../../utils/formatters';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import type { UserRole, UserDto } from '../../types/auth';
+import styles from '../../styles/layouts/editPageLayout.module.css';
+
+type FormValues = {
+  username: string;
+  email: string;
+  role: UserRole;
+  password?: string;
+};
+
+export const UserEditPage = () => {
+  const { id } = useParams<{ id: string }>();
+  const isNew = id === 'new';
+  useDocumentTitle(isNew ? 'Новый пользователь' : 'Редактирование пользователя');
+
+  const { data: originalData, isLoading, isError } = useQuery({
+    queryKey: ['user', id],
+    queryFn: () => usersService.getById(Number(id)),
+    enabled: !isNew
+  });
+
+  if (isLoading) return <Spinner fullPage size={40} />;
+  if (isError) return <ErrorState message="Не удалось получить данные пользователя." />;
+
+  return <UserForm key={isNew ? 'new' : originalData?.id} isNew={isNew} id={id!} originalData={originalData} />;
+};
+
+interface UserFormProps {
+  isNew: boolean;
+  id: string;
+  originalData?: UserDto;
+}
+
+const UserForm = ({ isNew, id, originalData }: UserFormProps) => {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { user: currentUser, logout } = useAuthStore();
+
+  const isSelf = currentUser?.username === originalData?.username;
+  const isSuperAdmin = currentUser?.role === 'SUPERADMIN';
+
+  const { register, handleSubmit, control, watch, formState: { errors } } = useForm<FormValues>({
+    resolver: zodResolver(isNew ? createUserSchema : updateUserSchema),
+    mode: 'onTouched',
+    defaultValues: {
+      username: originalData?.username || '',
+      email: originalData?.email || '',
+      role: originalData?.role || 'USER',
+      password: ''
+    }
+  });
+
+  const passwordValue = watch('password');
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: FormValues) => {
+      if (isNew) {
+        return usersService.create({
+          username: data.username,
+          email: data.email,
+          password: data.password as string,
+          role: data.role
+        });
+      } else {
+        return usersService.update(Number(id), { 
+          role: data.role, 
+          password: data.password || undefined 
+        });
+      }
+    },
+    onSuccess: () => {
+      toast.success(isNew ? 'Пользователь создан' : 'Данные обновлены');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      
+      if (isSelf && passwordValue) {
+        logout(); 
+        navigate('/?auth=login', { replace: true });
+        toast('Вы были выведены из системы в связи со сменой пароля.', { icon: '🔒' });
+      } else {
+        navigate('/admin/users');
+      }
+    },
+    onError: (e: Error | unknown) => {
+      if (!isAxiosError(e)) {
+        toast.error((e as Error).message || 'Ошибка валидации');
+      }
+    }
+  });
+
+  const onSubmit = (data: FormValues) => saveMutation.mutate(data);
+
+  const roleOptions = isSuperAdmin ? [
+    { value: 'USER', label: 'Пользователь (USER)' },
+    { value: 'ADMIN', label: 'Администратор (ADMIN)' }
+  ] : [];
+
+  return (
+    <div className={styles.container}>
+      <div className={styles.header}>
+        <Button variant="ghost" onClick={() => navigate('/admin/users')} className={styles.backBtn}>
+          <ArrowLeft size={16} /> Назад
+        </Button>
+        <div>
+          <h1 className={styles.title}>{isNew ? 'Добавление пользователя' : 'Редактирование профиля'}</h1>
+          <p className={styles.subtitle}>Управление доступом к системе</p>
+        </div>
+      </div>
+
+      <div className={styles.content}>
+        <Card className={styles.formCard}>
+          <h3 className={styles.cardTitle}>Учетные данные</h3>
+          
+          <form id="user-form" onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className={styles.field}>
+              <label className={styles.label}>Логин {isNew && <span className={styles.req}>*</span>}</label>
+              <Input 
+                {...register('username')} 
+                disabled={!isNew} 
+                placeholder="Введите логин" 
+                error={errors.username?.message} 
+              />
+              {!isNew && <p className={styles.hint}>Логин нельзя изменить после создания.</p>}
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.label}>Email {isNew && <span className={styles.req}>*</span>}</label>
+              <Input 
+                type="email" 
+                {...register('email')} 
+                disabled={!isNew} 
+                placeholder="example@mail.com" 
+                error={errors.email?.message} 
+              />
+              {!isNew && <p className={styles.hint}>Email нельзя изменить после создания.</p>}
+            </div>
+
+            <div className={styles.field}>
+              <label className={styles.label}>Пароль {isNew && <span className={styles.req}>*</span>}</label>
+              <Input 
+                type="password" 
+                {...register('password')} 
+                placeholder={isNew ? 'Задайте безопасный пароль' : 'Введите новый пароль, чтобы изменить текущий'} 
+                error={errors.password?.message} 
+              />
+              {isSelf && passwordValue && (
+                <div className={styles.warningBanner}>
+                  <AlertTriangle size={18} />
+                  Смена пароля приведет к завершению всех активных сессий.
+                </div>
+              )}
+            </div>
+
+            {(!isSelf && isSuperAdmin) && (
+              <div className={styles.field}>
+                <label className={styles.label}>Системная роль <span className={styles.req}>*</span></label>
+                <Controller
+                  name="role"
+                  control={control}
+                  render={({ field }) => (
+                    <Select 
+                      value={field.value} 
+                      onChange={field.onChange} 
+                      options={roleOptions} 
+                      isSearchable={false} 
+                    />
+                  )}
+                />
+              </div>
+            )}
+          </form>
+
+          <div className={styles.actions}>
+            <Button variant="secondary" onClick={() => navigate('/admin/users')}>Отмена</Button>
+            <Button type="submit" form="user-form" isLoading={saveMutation.isPending}>
+              <Save size={16} /> {isNew ? 'Создать аккаунт' : 'Сохранить изменения'}
+            </Button>
+          </div>
+        </Card>
+
+        {!isNew && originalData && (
+          <div className={styles.metaColumn}>
+            <Card className={styles.metaCard}>
+              <h3 className={styles.cardTitle}>Системная информация</h3>
+              
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>ID</span>
+                <span className={styles.metaValue}>{originalData.id}</span>
+              </div>
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>Создан</span>
+                <span className={styles.metaValue}>{formatDateTime(originalData.createdAt)}</span>
+              </div>
+              <div className={styles.metaItem}>
+                <span className={styles.metaLabel}>Обновлен</span>
+                <span className={styles.metaValue}>{formatDateTime(originalData.updatedAt)}</span>
+              </div>
+            </Card>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/pages/UsersPage/UsersPage.tsx"
+import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Plus, Edit, Trash2, ShieldOff, Filter } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { clsx } from 'clsx';
+import toast from 'react-hot-toast';
+import { useAuthStore } from '../../store/authStore';
+import { usersService } from '../../services/users.service';
+import { useUrlFilters } from '../../hooks/useUrlFilters';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
+import { toggleSort } from '../../utils/tableUtils';
+import { parseUserFilters } from './usersParser';
+import { formatDateTime } from '../../utils/formatters';
+import { ROLE_LABELS } from '../../types/auth';
+import { Input } from '../../components/ui/Input/Input';
+import { Button } from '../../components/ui/Button/Button';
+import { Badge } from '../../components/ui/Badge/Badge';
+import { Pagination } from '../../components/ui/Pagination/Pagination';
+import { TableCard, Table, TableHead, TableRow, TableHeader, TableBody, TableCell } from '../../components/ui/Table/Table';
+import { ConfirmModal } from '../../components/ui/ConfirmModal/ConfirmModal';
+import { UserFilters } from '../../features/admin/components/UserFilters/UserFilters';
+import styles from '../../styles/layouts/tablePageLayout.module.css';
+
+export const UsersPage = () => {
+  useDocumentTitle('Управление пользователями');
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const currentUser = useAuthStore((state) => state.user);
+  
+  const { filters, updateFilters, resetFilters } = useUrlFilters(['updatedAt,desc'], parseUserFilters);
+  const [searchValue, setSearchValue] = useState(filters.search);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+
+  const[deleteId, setDeleteId] = useState<number | null>(null);
+  const [revokeId, setRevokeId] = useState<number | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['users', filters],
+    queryFn: () => usersService.getUsers(filters),
+    placeholderData: (prev) => prev
+  });
+
+  const { data: myProfile } = useQuery({
+    queryKey: ['users', 'me'],
+    queryFn: () => usersService.getMe()
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => usersService.delete(id),
+    onSuccess: () => {
+      toast.success('Пользователь успешно удален');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    }
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: (id: number) => usersService.revokeSessions(id),
+    onSuccess: () => toast.success('Сессии пользователя успешно отозваны')
+  });
+
+  const handleSort = (field: string, isShiftPressed: boolean) => {
+    const newSort = toggleSort(filters.sort as string[], field, isShiftPressed);
+    updateFilters({ sort: newSort, page: 0 });
+  };
+
+  const displayItems = useMemo(() => {
+    const items = data?.items || [];
+    if (!myProfile) return items;
+
+    const filtered = items.filter(u => u.username !== myProfile.username);
+
+    return [myProfile, ...filtered];
+  }, [data?.items, myProfile]);
+
+  return (
+    <div className={styles.container}>
+      <div className={styles.header}>
+        <div className={styles.titleBlock}>
+          <h1 className={styles.title}>Пользователи</h1>
+          <p className={styles.subtitle}>Управление учетными записями и правами доступа</p>
+        </div>
+
+        <div className={styles.controlsArea}>
+          <div className={styles.toolbar}>
+            <div className={styles.searchBar}>
+              <Input 
+                icon={<Search size={18} />} 
+                placeholder="Поиск по логину..." 
+                value={searchValue as string}
+                onChange={(e) => setSearchValue(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && updateFilters({ search: searchValue })}
+                onClear={() => { setSearchValue(''); updateFilters({ search: '' }); }}
+              />
+            </div>
+            <Button onClick={() => navigate('/admin/users/new')}>
+              <Plus size={18} /> Добавить
+            </Button>
+          </div>
+          <Button variant="secondary" onClick={() => setIsFiltersOpen(true)}>
+              <Filter size={18} />
+              <span>Фильтры</span>
+          </Button>
+        </div>
+      </div>
+
+      <TableCard isLoading={isLoading}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableHeader sortField="id" currentSort={filters.sort as string[]} onSort={handleSort}>ID</TableHeader>
+              <TableHeader sortField="username" currentSort={filters.sort as string[]} onSort={handleSort}>Логин</TableHeader>
+              <TableHeader sortField="role" currentSort={filters.sort as string[]} onSort={handleSort}>Роль</TableHeader>
+              <TableHeader sortField="createdAt" currentSort={filters.sort as string[]} onSort={handleSort}>Создан</TableHeader>
+              <TableHeader sortField="updatedAt" currentSort={filters.sort as string[]} onSort={handleSort}>Обновлен</TableHeader>
+              <TableHeader>Действия</TableHeader>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {displayItems.map(row => {
+              const isSelf = row.username === currentUser?.username;
+              const canManage = isSelf || (currentUser?.role === 'SUPERADMIN' 
+                ? row.role !== 'SUPERADMIN' 
+                : row.role === 'USER');
+
+              return (
+                <TableRow 
+                  key={`user-${row.id}`} 
+                  className={clsx({[styles.selfRow]: isSelf })}
+                >
+                  <TableCell className={styles.muted}>{row.id}</TableCell>
+                  <TableCell className={styles.bold}>
+                    <div className={styles.nameWithBadge}>
+                      {row.username}
+                      {isSelf && <Badge variant="info">Вы</Badge>}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={row.role === 'SUPERADMIN' ? 'danger' : row.role === 'ADMIN' ? 'warning' : 'default'}>
+                      {ROLE_LABELS[row.role]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className={styles.muted}>{formatDateTime(row.createdAt)}</TableCell>
+                  <TableCell className={styles.muted}>{formatDateTime(row.updatedAt)}</TableCell>
+                  <TableCell>
+                    <div className={styles.actions}>
+                      {(canManage && !isSelf) && (
+                        <button 
+                          className={styles.actionBtn} 
+                          onClick={() => setRevokeId(row.id)} 
+                          title="Отозвать все сессии"
+                        >
+                          <ShieldOff size={18} className={styles.iconDanger} />
+                        </button>
+                      )}
+                      
+                      {canManage && (
+                        <button className={styles.actionBtn} onClick={() => navigate(`/admin/users/${row.id}`)} title="Редактировать">
+                          <Edit size={18} className={styles.iconEdit} />
+                        </button>
+                      )}
+                      
+                      {canManage && !isSelf && (
+                        <button className={styles.actionBtn} onClick={() => setDeleteId(row.id)} title="Удалить">
+                          <Trash2 size={18} className={styles.iconDanger} />
+                        </button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+        
+        {data && data.totalItems > 0 && (
+          <div className={styles.paginationWrapper}>
+            <Pagination
+              currentPage={data.currentPage} totalPages={data.totalPages}
+              totalItems={data.totalItems} pageSize={data.currentSize}
+              onPageChange={(p) => updateFilters({ page: p }, false)}
+              onPageSizeChange={(s) => updateFilters({ size: s, page: 0 }, false)}
+              pageSizeOptions={[6, 12, 24, 48, 96]}
+            />
+          </div>
+        )}
+      </TableCard>
+
+      <UserFilters 
+        isOpen={isFiltersOpen} onClose={() => setIsFiltersOpen(false)} 
+        filters={filters} updateFilters={updateFilters} resetFilters={resetFilters}
+      />
+
+      <ConfirmModal 
+        isOpen={deleteId !== null} onClose={() => setDeleteId(null)}
+        onConfirm={() => { if (deleteId) deleteMutation.mutate(deleteId); setDeleteId(null); }}
+        title="Удалить пользователя?" 
+        message="Пользователь потеряет доступ к системе, а все его сессии будут принудительно завершены."
+        confirmLabel="Удалить" variant="danger" isLoading={deleteMutation.isPending}
+      />
+      <ConfirmModal 
+        isOpen={revokeId !== null} onClose={() => setRevokeId(null)}
+        onConfirm={() => { if (revokeId) revokeMutation.mutate(revokeId); setRevokeId(null); }}
+        title="Отозвать сессии?" 
+        message="Пользователь будет разлогинен на всех устройствах. Ему придется заново ввести логин и пароль."
+        confirmLabel="Отозвать сессии" variant="danger" isLoading={revokeMutation.isPending}
+      />
+    </div>
+  );
+};
+
+//"C:/exam-test/exam-frontend/src/pages/UsersPage/usersParser.ts"
+import { getString, getStringArray } from '../../hooks/useUrlFilters';
+import type { UserRole } from '../../types/auth';
+
+export const parseUserFilters = (params: URLSearchParams) => ({
+  roles: getStringArray(params, 'roles') as UserRole[],
+  createdAfter: getString(params, 'createdAfter'),
+  createdBefore: getString(params, 'createdBefore'),
+  updatedAfter: getString(params, 'updatedAfter'),
+  updatedBefore: getString(params, 'updatedBefore')
+});
+
+export type UserFiltersType = ReturnType<typeof parseUserFilters>;
+
+//"C:/exam-test/exam-frontend/src/schemas/authSchemas.ts"
+import { z } from 'zod';
+import { PASSWORD_REGEX } from '../config/constants';
+
+export const loginSchema = z.object({
+  username: z.string().min(2, 'Логин должен содержать минимум 2 символа').max(100, 'Максимум 100 символов'),
+  password: z.string().min(1, 'Введите пароль'),
+});
+export type LoginFormData = z.infer<typeof loginSchema>;
+
+export const registerSchema = z.object({
+  username: z.string().min(2, 'Минимум 2 символа').max(100, 'Максимум 100 символов'),
+  email: z.string().email('Некорректный формат email').max(254, 'Максимум 254 символа'),
+  password: z.string()
+    .min(8, 'Минимум 8 символов')
+    .max(60, 'Максимум 60 символов')
+    .regex(PASSWORD_REGEX, 'Пароль должен содержать заглавную и строчную лат. буквы, цифру и спецсимвол (!@#$%^&*_=+-).'),
+  confirmPassword: z.string()
+}).refine((data) => data.password === data.confirmPassword, {
+  message: 'Пароли не совпадают',
+  path: ['confirmPassword'],
+});
+export type RegisterFormData = z.infer<typeof registerSchema>;
+
+export const updatePasswordSchema = z.object({
+  newPassword: z.string()
+    .min(8, 'Минимум 8 символов')
+    .max(60, 'Максимум 60 символов')
+    .regex(PASSWORD_REGEX, 'Пароль должен содержать заглавную и строчную лат. буквы, цифру и спецсимвол (!@#$%^&*_=+-).'),
+  confirmPassword: z.string()
+}).refine((data) => data.newPassword === data.confirmPassword, {
+  message: 'Пароли не совпадают',
+  path: ['confirmPassword'],
+});
+export type UpdatePasswordFormData = z.infer<typeof updatePasswordSchema>;
+
+//"C:/exam-test/exam-frontend/src/schemas/userSchemas.ts"
+import { z } from 'zod';
+import { PASSWORD_REGEX } from '../config/constants';
+
+export const createUserSchema = z.object({
+  username: z.string().min(2, 'Логин от 2 до 100 символов').max(100, 'Максимум 100 символов'),
+  email: z.string().email('Некорректный формат email').max(254, 'Максимум 254 символа'),
+  role: z.enum(['USER', 'ADMIN', 'SUPERADMIN'] as const),
+  password: z.string()
+    .min(8, 'Минимум 8 символов')
+    .max(60, 'Максимум 60 символов')
+    .regex(PASSWORD_REGEX, 'Пароль должен содержать заглавную и строчную лат. буквы, цифру и спецсимвол (!@#$%^&*_=+-).')
+});
+export type CreateUserFormData = z.infer<typeof createUserSchema>;
+
+export const updateUserSchema = z.object({
+  role: z.enum(['USER', 'ADMIN', 'SUPERADMIN'] as const),
+  password: z.string().optional().refine(val => !val || PASSWORD_REGEX.test(val), {
+    message: 'Пароль должен содержать от 8 до 60 символов, заглавную/строчную буквы, цифру и спецсимвол (!@#$%^&*_=+-).'
+  })
+});
+export type UpdateUserFormData = z.infer<typeof updateUserSchema>;
+
+//"C:/exam-test/exam-frontend/src/services/auth.service.ts"
+import { apiClient } from '../config/api';
+import { getBrowserFingerprint } from '../utils/fingerprint';
+import { API_ENDPOINTS } from '../config/constants';
+import type { UserRole } from '../types/auth';
+
+export interface AuthResponseDto {
+  accessToken: string;
+  username: string;
+  email: string;
+  role: UserRole;
+}
+
+export const authService = {
+  async login(username: string, password: string): Promise<AuthResponseDto> {
+    const fingerprint = getBrowserFingerprint();
+    const { data } = await apiClient.post<AuthResponseDto>(API_ENDPOINTS.AUTH.LOGIN, { username, password, fingerprint });
+    return data;
+  },
+
+  async register(username: string, email: string, password: string): Promise<AuthResponseDto> {
+    const fingerprint = getBrowserFingerprint();
+    const { data } = await apiClient.post<AuthResponseDto>(API_ENDPOINTS.AUTH.REGISTER, { username, email, password, fingerprint });
+    return data;
+  },
+
+  async logout(): Promise<void> {
+    await apiClient.post(API_ENDPOINTS.AUTH.LOGOUT);
+  }
+};
+
+//"C:/exam-test/exam-frontend/src/services/logs.service.ts"
+import { apiClient } from '../config/api';
+import { API_ENDPOINTS } from '../config/constants';
+
+export interface LogFileDto {
+  filename: string;
+  sizeBytes: number;
+  lastModified: string;
+}
+
+export const logsService = {
+  async getFiles(): Promise<LogFileDto[]> {
+    const { data } = await apiClient.get<LogFileDto[]>(API_ENDPOINTS.LOGS.FILES);
+    return data;
+  },
+
+  async getTail(filename?: string, lines: number = 1000): Promise<string[]> {
+    const { data } = await apiClient.get<{ lines: string[] }>(API_ENDPOINTS.LOGS.TAIL, {
+      params: { filename, lines }
+    });
+    return data.lines;
+  },
+  
+  async downloadLog(filename?: string): Promise<Blob> {
+    const { data } = await apiClient.get<Blob>(API_ENDPOINTS.LOGS.DOWNLOAD, {
+      params: { filename },
+      responseType: 'blob'
+    });
+    return data;
+  }
+};
+
+//"C:/exam-test/exam-frontend/src/services/users.service.ts"
+import { apiClient } from '../config/api';
+import { API_ENDPOINTS } from '../config/constants';
+import type { UserDto, UserRole } from '../types/auth';
+import type { CommonFilters } from '../hooks/useUrlFilters';
+import type { PageDto } from '../types/pagination';
+
+export interface GetUsersParams extends CommonFilters {
+  roles?: UserRole[];
+  createdAfter?: string;
+  createdBefore?: string;
+  updatedAfter?: string;
+  updatedBefore?: string;
+}
+
+export const usersService = {
+  async getMe(): Promise<UserDto> {
+    const { data } = await apiClient.get<UserDto>(API_ENDPOINTS.USERS.ME);
+    return data;
+  },
+  async updateMyPassword(newPassword: string): Promise<void> {
+    await apiClient.put(API_ENDPOINTS.USERS.PASSWORD, { newPassword });
+  },
+  async getUsers(params: GetUsersParams): Promise<PageDto<UserDto>> {
+    const queryParams = {
+      page: params.page || 0, size: params.size || 10, search: params.search, sort: params.sort,
+      roles: params.roles?.join(','), createdAfter: params.createdAfter ? new Date(params.createdAfter).toISOString() : undefined,
+      createdBefore: params.createdBefore ? new Date(params.createdBefore).toISOString() : undefined,
+      updatedAfter: params.updatedAfter ? new Date(params.updatedAfter).toISOString() : undefined,
+      updatedBefore: params.updatedBefore ? new Date(params.updatedBefore).toISOString() : undefined
+    };
+    const { data } = await apiClient.get<PageDto<UserDto>>(API_ENDPOINTS.USERS.BASE, { params: queryParams });
+    return data;
+  },
+  async getById(id: number): Promise<UserDto> {
+    const { data } = await apiClient.get<UserDto>(API_ENDPOINTS.USERS.DETAILS(id));
+    return data;
+  },
+  async create(dto: any): Promise<UserDto> {
+    const { data } = await apiClient.post<UserDto>(API_ENDPOINTS.USERS.BASE, dto);
+    return data;
+  },
+  async update(id: number, dto: any): Promise<UserDto> {
+    const { data } = await apiClient.put<UserDto>(API_ENDPOINTS.USERS.DETAILS(id), dto);
+    return data;
+  },
+  async delete(id: number): Promise<void> {
+    await apiClient.delete(API_ENDPOINTS.USERS.DETAILS(id));
+  },
+  async revokeSessions(id: number): Promise<void> {
+    await apiClient.post(API_ENDPOINTS.USERS.REVOKE_SESSIONS(id));
+  }
+};
+
+//"C:/exam-test/exam-frontend/src/store/authStore.ts"
+import { create } from 'zustand';
+import axios from 'axios';
+import { getBrowserFingerprint } from '../utils/fingerprint';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/constants';
+import type { AuthUser } from '../types/auth';
+
+interface AuthState {
+  user: AuthUser | null;
+  accessToken: string | null;
+  isAuthenticated: boolean;
+  isInitialized: boolean;
+  isAdmin: boolean;
+  
+  setAuth: (token: string, user: AuthUser) => void;
+  logout: () => void;
+  checkAuth: () => Promise<void>;
+}
+
+let authPromise: Promise<void> | null = null;
+
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
+  accessToken: null,
+  isAuthenticated: false,
+  isInitialized: false,
+  isAdmin: false,
+
+  setAuth: (token, user) => set({ 
+    accessToken: token, 
+    user, 
+    isAuthenticated: true,
+    isAdmin: user.role === 'ADMIN' || user.role === 'SUPERADMIN'
+  }),
+  
+  logout: () => set({ 
+    accessToken: null, 
+    user: null, 
+    isAuthenticated: false, 
+    isAdmin: false 
+  }),
+
+  checkAuth: async () => {
+    if (authPromise) return authPromise;
+
+    authPromise = (async () => {
+      try {
+        const fingerprint = getBrowserFingerprint();
+        const { data } = await axios.post(
+          `${API_BASE_URL}${API_ENDPOINTS.AUTH.REFRESH}`, 
+          { fingerprint }, 
+          { withCredentials: true }
+        );
+        
+        set({ 
+          accessToken: data.accessToken, 
+          user: { username: data.username, role: data.role }, 
+          isAuthenticated: true, 
+          isInitialized: true,
+          isAdmin: data.role === 'ADMIN' || data.role === 'SUPERADMIN'
+        });
+      } catch {
+        set({ 
+          accessToken: null, 
+          user: null, 
+          isAuthenticated: false, 
+          isInitialized: true,
+          isAdmin: false
+        });
+      } finally {
+        authPromise = null;
+      }
+    })();
+
+    return authPromise;
+  }
+}));
+
+//"C:/exam-test/exam-frontend/src/store/uiStore.ts"
+import { create } from 'zustand';
+
+type Theme = 'light' | 'dark';
+
+interface UiState {
+  theme: Theme;
+  isSidebarOpen: boolean;
+  toggleTheme: () => void;
+  toggleSidebar: () => void;
+  setTheme: (theme: Theme) => void;
+}
+
+const getInitialTheme = (): Theme => {
+  const savedTheme = localStorage.getItem('app-theme') as Theme;
+  if (savedTheme) return savedTheme;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+};
+
+export const useUiStore = create<UiState>((set) => ({
+  theme: getInitialTheme(),
+  isSidebarOpen: true,
+  
+  toggleTheme: () => set((state) => {
+    const newTheme = state.theme === 'light' ? 'dark' : 'light';
+    localStorage.setItem('app-theme', newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+    return { theme: newTheme };
+  }),
+  
+  setTheme: (theme) => set(() => {
+    localStorage.setItem('app-theme', theme);
+    document.documentElement.setAttribute('data-theme', theme);
+    return { theme };
+  }),
+
+  toggleSidebar: () => set((state) => ({ isSidebarOpen: !state.isSidebarOpen }))
+}));
+
+//"C:/exam-test/exam-frontend/src/styles/globals.css"
+@import './themes.css';
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/inter-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/inter-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/inter-600.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/inter-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+  transition: background-color var(--transition), color var(--transition);
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
+}
+
+#root {
+  width: 100%;            
+  min-height: 100vh;     
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+//"C:/exam-test/exam-frontend/src/styles/themes.css"
+:root {
+  color-scheme: light;
+  
+  --bg-primary: #f8fafc;     
+  --bg-surface: #ffffff;     
+  --bg-hover: #f1f5f9;
+  
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --text-muted: #94a3b8;
+  
+  --border-color: #e2e8f0;
+  
+  --primary-color: #3b82f6;
+  --primary-hover: #2563eb;
+  
+  --status-critical: #ef4444; 
+  --status-high: #f97316;     
+  --status-medium: #eab308;   
+  --status-low: #3b82f6;      
+  --status-info: #10b981;     
+
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  --transition: all 0.2s ease-in-out;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg-primary: #0f0f0f;      
+  --bg-surface: #181818;      
+  --bg-hover: #222222;
+
+  --text-primary: #ffffff;    
+  --text-secondary: #a8a8a8;  
+  --text-muted: #9ca3af;
+
+  --border-color: #222222;
+
+  --primary-color: #2563eb;   
+  --primary-hover: #3b82f6;   
+
+  --status-critical: #ff4d4d;
+  --status-high: #ff8c00;     
+  --status-medium: #facc15;  
+  --status-low: #00d4ff;      
+  --status-info: #33d17a;     
+
+  --shadow-sm: none;
+  --shadow-md: none;
+}
+
+//"C:/exam-test/exam-frontend/src/styles/layouts/editPageLayout.module.css"
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1000px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.backBtn {
+  padding-left: 0;
+  height: auto;
+  color: var(--text-secondary);
+}
+.backBtn:hover {
+  background-color: transparent;
+  color: var(--text-primary);
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 24px;
+}
+
+.formCard {
+  flex: 2 1 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.metaColumn {
+  flex: 1 0 240px;
+  max-width: 360px;
+  min-width: 0;
+}
+
+.metaCard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background-color: color-mix(in srgb, var(--bg-hover) 40%, var(--bg-surface));
+}
+
+.cardTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.req  { color: var(--status-critical); }
+
+.hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.metaItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.metaLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.metaValue {
+  font-size: 14px;
+  color: var(--text-primary);
+  font-weight: 500;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+.nativeInput {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: var(--transition);
+}
+.nativeInput:focus { border-color: var(--primary-color); }
+
+.componentSelector {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.selectedComponentBox {
+  flex: 1;
+  min-height: 40px;
+  min-width: 0;
+  padding: 8px 12px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+}
+
+.compEmpty { color: var(--text-muted); font-size: 14px; }
+
+.compSelected {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.successIcon {
+  color: var(--status-info);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.compText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.cName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.cId    { font-size: 12px; color: var(--text-muted); }
+.selectBtn { flex-shrink: 0; }
+
+.containerWide { max-width: 1600px; }
+
+.leftColumn {
+  flex: 1 1 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.rightColumnWide {
+  flex: 2.5 1 600px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  height: 100%;
+  min-width: 0;
+}
+
+.textareaInput { min-height: 80px; resize: vertical; }
+
+.flushCard {
+  padding: 0;
+  overflow: hidden;
+  border: none;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.metaGrid { display: flex; gap: 24px; flex-wrap: wrap; }
+
+.actionsClean {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.warningBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 16px;
+  background-color: color-mix(in srgb, var(--status-medium) 15%, transparent);
+  color: var(--status-medium);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+@media (max-width: 600px) {
+  .actions {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .actions > * {
+    width: 100%;
+    justify-content: center;
+  }
+  .actionsClean {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .actionsClean > * {
+    width: 100%;
+    justify-content: center;
+  }
+  .metaGrid {
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 400px) {
+  .title    { font-size: 18px; }
+  .subtitle { font-size: 12px; }
+  .cardTitle { font-size: 15px; }
+  .componentSelector {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .selectBtn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+//"C:/exam-test/exam-frontend/src/styles/layouts/tablePageLayout.module.css"
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  container-type: inline-size;
+  container-name: tableHeader;
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1 1 400px;
+  min-width: 0;
+}
+
+.title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.toolbar {
+  display: contents;
+}
+
+.controlsArea {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  column-gap: 12px;
+  row-gap: 0;
+  flex: 1 1 500px;
+  max-width: 600px;
+  min-width: 0;
+}
+
+.controlsArea::after {
+  content: '';
+  order: 1;
+  flex: 0 0 100%;
+  height: 0;
+}
+
+.searchBar {
+  order: 0;
+  flex: 0 0 auto;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.toolbar > button,
+.controlsArea > button {
+  order: 2;
+}
+
+@container tableHeader (max-width: 915px) {
+  .controlsArea {
+    max-width: 100%;
+  }
+}
+
+.muted  { color: var(--text-muted); font-size: 13px; }
+.bold   { font-weight: 600; color: var(--text-primary); }
+
+.nameWithBadge { display: flex; align-items: center; gap: 8px; }
+
+.targetTypesWrapper {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-width: 200px;
+}
+
+.codeCell {
+  font-family: monospace;
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.compCell { display: flex; flex-direction: column; gap: 2px; }
+
+.compName {
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+.compId { font-size: 11px; color: var(--text-muted); }
+
+.actions { display: flex; align-items: center; gap: 4px; }
+
+.actionBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  transition: all 0.2s;
+}
+.actionBtn:hover    { background-color: var(--bg-hover); }
+.iconSuccess:hover  { color: var(--status-info); }
+.iconEdit:hover     { color: var(--primary-color); }
+.iconDanger:hover   { color: var(--status-critical); }
+
+.selfRow {
+  background-color: color-mix(in srgb, var(--primary-color) 8%, transparent);
+}
+
+.paginationWrapper { padding: 25px 20px 20px 20px; }
+
+@media (max-width: 600px) {
+  .title    { font-size: 20px; }
+  .subtitle { font-size: 13px; }
+  .paginationWrapper { padding: 20px 16px 16px 16px; }
+}
+
+@media (max-width: 480px) {
+  .toolbar > button,
+  .controlsArea > button {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .title    { font-size: 18px; }
+  .subtitle { font-size: 12px; }
+  .actionBtn { padding: 8px; }
+  .compName  { max-width: 160px; }
+  .targetTypesWrapper { max-width: 140px; }
+}
+
+//"C:/exam-test/exam-frontend/src/types/auth.ts"
+export type UserRole = 'USER' | 'ADMIN' | 'SUPERADMIN';
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  SUPERADMIN: 'Суперадминистратор',
+  ADMIN: 'Администратор',
+  USER: 'Пользователь'
+};
+
+export interface AuthUser {
+  username: string;
+  role: UserRole;
+}
+
+export interface UserDto {
+  id: number;
+  username: string;
+  email: string;
+  role: UserRole;
+  createdAt: string;
+  updatedAt: string | null;
+}
+
+//"C:/exam-test/exam-frontend/src/types/common.ts"
+export interface SelectOption {
+  value: string | number;
+  label: string;
+}
+
+//"C:/exam-test/exam-frontend/src/types/pagination.ts"
+export interface PageDto<T> {
+  items: T[];
+  itemsCount: number;
+  currentPage: number;
+  currentSize: number;
+  totalPages: number;
+  totalItems: number;
+  isFirst: boolean;
+  isLast: boolean;
+  hasNext: boolean;
+  hasPrevious: boolean;
+}
+
+//"C:/exam-test/exam-frontend/src/utils/downloadUtils.ts"
+/**
+ * Утилита для сохранения файла на диск клиента из объекта Blob.
+ * 
+ * @param blob Объект Blob, полученный от API
+ * @param filename Желаемое имя файла при скачивании
+ */
+export const saveBlobAsFile = (blob: Blob, filename: string): void => {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+};
+
+//"C:/exam-test/exam-frontend/src/utils/fingerprint.ts"
+const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
+export const getBrowserFingerprint = (): string => {
+  const FINGERPRINT_KEY = 'browser_fingerprint';
+  let fingerprint = localStorage.getItem(FINGERPRINT_KEY);
+  
+  if (!fingerprint) {
+    fingerprint = generateUUID();
+    localStorage.setItem(FINGERPRINT_KEY, fingerprint);
+  }
+  
+  return fingerprint;
+};
+
+//"C:/exam-test/exam-frontend/src/utils/formatters.ts"
+export const formatDateTime = (dateString?: string | null): string => {
+  if (!dateString) return 'Н/Д';
+  const date = new Date(dateString);
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).replace(',', '');
+};
+
+
+//"C:/exam-test/exam-frontend/src/utils/selectStyles.ts"
+import type { StylesConfig } from 'react-select';
+
+export const getSelectStyles = <OptionType, IsMulti extends boolean>(): StylesConfig<OptionType, IsMulti> => ({
+  control: (base, state) => ({
+    ...base,
+    backgroundColor: 'var(--bg-surface)',
+    borderColor: state.isFocused ? 'var(--primary-color)' : 'var(--border-color)',
+    boxShadow: state.isFocused ? '0 0 0 1px color-mix(in srgb, var(--primary-color) 20%, transparent)' : 'none',
+    '&:hover': { borderColor: 'var(--primary-color)' },
+    minHeight: '40px',
+    borderRadius: 'var(--radius-md)',
+    cursor: 'pointer',
+  }),
+  menu: (base) => ({
+    ...base,
+    backgroundColor: 'var(--bg-surface)',
+    border: '1px solid var(--border-color)',
+    boxShadow: 'var(--shadow-md)',
+    zIndex: 50,
+  }),
+  option: (base, state) => ({
+    ...base,
+    backgroundColor: state.isSelected 
+      ? 'var(--primary-color)' 
+      : state.isFocused 
+        ? 'var(--bg-hover)' 
+        : 'transparent',
+    color: state.isSelected ? '#fff' : 'var(--text-primary)',
+    cursor: 'pointer',
+    '&:active': { backgroundColor: 'var(--primary-hover)' },
+  }),
+  singleValue: (base) => ({
+    ...base,
+    color: 'var(--text-primary)',
+  }),
+  multiValue: (base) => ({
+    ...base,
+    backgroundColor: 'var(--bg-hover)',
+    border: '1px solid var(--border-color)',
+    borderRadius: '4px',
+  }),
+  multiValueLabel: (base) => ({
+    ...base,
+    color: 'var(--text-primary)',
+  }),
+  multiValueRemove: (base) => ({
+    ...base,
+    color: 'var(--text-muted)',
+    cursor: 'pointer',
+    '&:hover': {
+      backgroundColor: 'var(--status-critical)',
+      color: '#fff',
+    },
+  }),
+  input: (base) => ({
+    ...base,
+    color: 'var(--text-primary)',
+  })
+});
+
+//"C:/exam-test/exam-frontend/src/utils/tableUtils.ts"
+/**
+ * Вычисляет новое состояние массива сортировки с поддержкой мульти-сортировки (Shift).
+ * 
+ * @param currentSort Текущий массив сортировок (например, ['createdAt,desc'])
+ * @param field Поле, по которому кликнули
+ * @param isShiftPressed Был ли зажат Shift при клике
+ * @returns Новый массив сортировок
+ */
+export const toggleSort = (currentSort: string[], field: string, isShiftPressed: boolean): string[] => {
+  const sortArray = [...currentSort];
+  const existingIndex = sortArray.findIndex(s => s.startsWith(field));
+  let newDirection = 'asc';
+
+  if (existingIndex >= 0) {
+    const currentDir = sortArray[existingIndex].split(',')[1];
+    newDirection = currentDir === 'asc' ? 'desc' : 'asc';
+  }
+
+  const sortString = `${field},${newDirection}`;
+
+  if (isShiftPressed) {
+    if (existingIndex >= 0) {
+      sortArray[existingIndex] = sortString;
+    } else {
+      sortArray.push(sortString);
+    }
+  } else {
+    return [sortString];
+  }
+
+  return sortArray;
+};
+
+///backend
+

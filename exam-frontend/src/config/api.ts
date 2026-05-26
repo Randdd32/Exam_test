@@ -36,6 +36,9 @@ const processQueue = (error: unknown, token: string | null = null) => {
 
 const translateErrorMessage = (errorCode?: string, msg?: string): string => {
   if (msg?.includes('Username already exists')) return 'Пользователь с таким логином уже существует.';
+  if (msg?.includes('UserEntity with username') && msg?.includes('not found')) {
+    return 'Пользователь с таким логином не найден.';
+  }
   if (msg?.includes('Email already exists')) return 'Этот Email уже используется.';
   if (msg?.includes('Invalid username or password')) return 'Неверный логин или пароль.';
   if (errorCode === 'DATA_INTEGRITY_VIOLATION') return 'Нарушение уникальности данных.';

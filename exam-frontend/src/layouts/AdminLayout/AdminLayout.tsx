@@ -40,7 +40,7 @@ export const AdminLayout = () => {
         <div className={styles.sidebarHeader}>
           <Link to="/" className={styles.logo}>
             <Shield size={24} className={styles.logoIcon} />
-            {isSidebarOpen && <span>Панель администратора</span>}
+            {isSidebarOpen && <span>Админ-панель</span>}
           </Link>
         </div>
         

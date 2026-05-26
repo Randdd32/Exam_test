@@ -92,7 +92,7 @@ export const UsersPage = () => {
                 onClear={() => { setSearchValue(''); updateFilters({ search: '' }); }}
               />
             </div>
-            <Button onClick={() => navigate('/users/new')}>
+            <Button onClick={() => navigate('/admin/users/new')}>
               <Plus size={18} /> Добавить
             </Button>
           </div>
@@ -154,7 +154,7 @@ export const UsersPage = () => {
                       )}
                       
                       {canManage && (
-                        <button className={styles.actionBtn} onClick={() => navigate(`/users/${row.id}`)} title="Редактировать">
+                        <button className={styles.actionBtn} onClick={() => navigate(`/admin/users/${row.id}`)} title="Редактировать">
                           <Edit size={18} className={styles.iconEdit} />
                         </button>
                       )}
